@@ -14,7 +14,7 @@ from psfmodels import make_psf
 from tifffile import imread
 from tqdm import tqdm
 from merfish3danalysis.utils._dataio import read_metadatafile
-from merfish3danalysis.utils._imageprocessing import replace_hot_pixels
+from merfish3danalysis.utils._imageprocessing import replace_hot_pixels  ### Add to other file
 from itertools import compress
 
 def convert_data(root_path: Path):
@@ -71,6 +71,8 @@ def convert_data(root_path: Path):
     image_flipped_y = True
     image_flipped_x = False
 
+##### This part has 2 other camera options compared to the other file ####
+    
     if camera == 'bsi':
         # camera gain and offset
         # from Photometrics manual
@@ -140,6 +142,10 @@ def convert_data(root_path: Path):
     datastore_state = datastore.datastore_state
     datastore_state.update({"Calibrations": True})
     datastore.datastore_state = datastore_state
+
+
+### This part is also different - it adds if statements if the stage is flipped, if channel order is reversed, 
+#### if stage is flipped, if image is rotated or flipped, etc.
     
     round_idx = 0
     if stage_flipped_x or stage_flipped_y:
