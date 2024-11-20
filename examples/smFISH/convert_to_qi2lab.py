@@ -18,11 +18,17 @@ from psfmodels import make_psf
 from tifffile import imread
 from tqdm import tqdm
 from merfish3danalysis.utils._dataio import read_metadatafile
+from merfish3danalysis.utils._imageprocessing import replace_hot_pixels
 from itertools import compress
 
-def convert_data():
-    # root data folder
-    root_path = Path(r"/mnt/data/qi2lab/20240317_OB_MERFISH_7")
+def convert_data(root_path: Path):
+    """Convert qi2lab microscope data to qi2lab datastore.
+    
+    Parameters
+    ----------
+    root_path: Path
+        path to dataset
+    """
 
     # load codebook
     # --------------
@@ -53,7 +59,7 @@ def convert_data():
         metadata["yellow_exposure"],
         metadata["red_exposure"],
     ]
-    channel_order = "reversed"
+    channel_order = metadata["channels_reversed"]
     voxel_size_zyx_um = [0.310, 0.098, 0.098]
     na = 1.35
     ri = 1.51
@@ -62,13 +68,28 @@ def convert_data():
     channel_idxs = [0, 1, 2]
     channels_in_data = list(compress(channel_idxs, channels_active))
 
-    # camera gain and offset
-    # from Photometrics manual
-    # ----------------------
-    e_per_ADU = 1.0
-    offset = 100.0
-    noise_map = None
-
+    if camera == 'bsi':
+        # camera gain and offset
+        # from Photometrics manual
+        # ----------------------
+        e_per_ADU = 1.0
+        offset = 100.0
+        noise_map = None
+    elif camera == "flir":
+        # camera gain and offset
+        # from flir calibration
+        # ----------------------
+        e_per_ADU = .03
+        offset = 0.0
+        noise_map = imread(root_path / Path(r"flir_hot_pixel_image.tif"))
+    elif camera == "orcav3":
+        # camera gain and offset
+        # from hamamatsu calibration
+        # ----------------------
+        e_per_ADU = .46
+        offset = 100.0
+        noise_map = offset * np.ones((2048,2048),dtype=np.uint16)
+    
     # generate PSFs
     # --------------
     channel_psfs = []
@@ -97,8 +118,8 @@ def convert_data():
     datastore.channels_in_data = ["alexa488", "atto565", "alexa647"]
     datastore.experiment_order = experiment_order
     datastore.num_tiles = num_tiles
-    datastore.microscope_type = "3D"
-    datastore.camera_model = "bsi"
+    datastore.microscope_type = "3D" # this could be automatically determined from z steps
+    datastore.camera_model = camera
     datastore.tile_overlap = 0.2
     datastore.e_per_ADU = e_per_ADU
     datastore.na = na
@@ -108,11 +129,37 @@ def convert_data():
     datastore._shading_maps = np.ones((3, 2048, 2048), dtype=np.float32)
     datastore.channel_psfs = channel_psfs
     datastore.voxel_size_zyx_um = voxel_size_zyx_um
+    datastore.baysor_path = Path(r"/home/qi2lab/Documents/github/Baysor/bin/baysor/bin/./baysor")
+    datastore.baysor_options = Path(r"/home/qi2lab/Documents/github/merfish3d-analysis/qi2lab.toml")
+    datastore.julia_threads = 20
 
-    # Update datastore state to note that calibrations are doen
+    # Update datastore state to note that calibrations are done
     datastore_state = datastore.datastore_state
     datastore_state.update({"Calibrations": True})
     datastore.datastore_state = datastore_state
+
+    round_idx = 0
+    if stage_flipped_x or stage_flipped_y:
+        for tile_idx in range(num_tiles):
+            stage_position_path = root_path / Path(
+                root_name
+                + "_r"
+                + str(round_idx + 1).zfill(4)
+                + "_tile"
+                + str(tile_idx).zfill(4)
+                + "_stage_positions.csv"
+            )
+            stage_positions = read_metadatafile(stage_position_path)
+            stage_x = np.round(float(stage_positions["stage_x"]), 2)
+            stage_y = np.round(float(stage_positions["stage_y"]), 2)
+            if tile_idx == 0:
+                max_y = stage_y
+                max_x = stage_x
+            else:
+                if max_y < stage_y:
+                    max_y = stage_y
+                if max_x < stage_x:
+                    max_x = stage_x
 
     for round_idx in tqdm(range(num_rounds), desc="rounds"):
         for tile_idx in tqdm(range(num_tiles), desc="tile",leave=False):
@@ -130,11 +177,36 @@ def convert_data():
 
             raw_image = imread(image_path)
             raw_image = np.swapaxes(raw_image,0,1)
+            if tile_idx == 0 and round_idx == 0:
+                correct_shape = raw_image.shape
+            if raw_image is None or raw_image.shape != correct_shape:
+                    print('\nround='+str(round_idx+1)+'; tile='+str(tile_idx+1))
+                    print('Found shape: '+str(raw_image.shape))
+                    print('Correct shape: '+str(correct_shape))
+                    print('Replacing data with zeros.\n')
+                    raw_image = np.zeros(correct_shape, dtype=np.uint16)
+                 
             if channel_order == "reversed":
                 raw_image = np.flip(raw_image,axis=0)
-
+                
+            if image_rotated:
+                raw_image = np.rot90(raw_image, k=-1, axes=(3, 2))
+                
+            if image_flipped_y:
+                raw_image = np.flip(raw_image,axis=2)
+                
+            if image_flipped_x:
+                raw_image = np.flip(raw_image,axis=3)
+            
             # Correct for gain and offset
-            raw_image = (raw_image).astype(np.float32) - offset
+            if camera == "flir":
+                raw_image = replace_hot_pixels(noise_map,raw_image)
+                raw_image = replace_hot_pixels(
+                    np.max(raw_image,axis=0),
+                    raw_image,
+                    threshold=100)
+                
+            raw_image = ((raw_image.astype(np.float32) - offset) * e_per_ADU)
             raw_image[raw_image < 0.0] = 0.0
             raw_image = (raw_image * e_per_ADU).astype(np.uint16)
             
@@ -147,7 +219,18 @@ def convert_data():
             stage_x = np.round(float(df_stage_positions['stage_x']),2)
             stage_y = np.round(float(df_stage_positions['stage_y']),2)
             stage_z = np.round(float(df_stage_positions['stage_z']),2)
-            stage_pos_zyx_um = np.asarray([stage_z,stage_y,stage_x],dtype=np.float32)
+            
+            if stage_flipped_x or stage_flipped_y:
+                if stage_flipped_y:
+                    corrected_y =  max_y - stage_y
+                else:
+                    corrected_y = stage_y
+                if stage_flipped_x:
+                    corrected_x = max_x - stage_x
+                else:
+                    corrected_x = stage_x      
+                
+            stage_pos_zyx_um = np.asarray([stage_z,corrected_y,corrected_x],dtype=np.float32)
 
             # write fidicual data and metadata
             datastore.save_local_corrected_image(
@@ -176,7 +259,7 @@ def convert_data():
                 tile=tile_idx,
                 psf_idx=1,
                 gain_correction=True,
-                hotpixel_correction=False,
+                hotpixel_correction=True, # changed
                 shading_correction=False,
                 bit=int(experiment_order[round_idx,1])-1,
             )
@@ -192,7 +275,7 @@ def convert_data():
                 tile=tile_idx,
                 psf_idx=2,
                 gain_correction=True,
-                hotpixel_correction=False,
+                hotpixel_correction=True, # changed 
                 shading_correction=False,
                 bit=int(experiment_order[round_idx,2])-1,
             )
@@ -207,4 +290,5 @@ def convert_data():
     datastore.datastore_state = datastore_state
     
 if __name__ == "__main__":
+    root_path = Path(r"/mnt/data/qi2lab/20241030_OB_22bit_MERFISH")
     convert_data()
