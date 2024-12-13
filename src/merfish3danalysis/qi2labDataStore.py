@@ -2833,7 +2833,7 @@ class qi2labDataStore:
         except Exception:
             print("Error saving fused image.")
             return None
-
+        
     def load_local_decoded_spots(
         self,
         tile: Union[int, str],
@@ -2931,33 +2931,7 @@ class qi2labDataStore:
         )
 
         self._save_to_parquet(filtered_decoded_df, current_global_filtered_decoded_path)
-
-    def load_global_cellpose_centroids(
-        self,
-    ) -> Optional[pd.DataFrame]:
-        """Load Cellpose prediction cell centroids."""
-
-        current_cellpose_centroids_path = (
-            self._segmentation_root_path
-            / Path("cellpose")
-            / Path("cell_centroids.parquet")
-        )
-
-        if not current_cellpose_centroids_path.exists():
-            print("Cellpose cell mask centroids not found.")
-            return None
-        else:
-            cellpose_centroids = self._load_from_parquet(
-                current_cellpose_centroids_path
-            )
-            return cellpose_centroids
-
-    def save_global_cellpose_centroids(
-        self,
-        centroids: pd.DataFrame,
-    ) -> None:
-        pass
-
+                
     def load_global_cellpose_outlines(
         self,
     ) -> Optional[dict]:
@@ -2975,12 +2949,6 @@ class qi2labDataStore:
                 current_cellpose_outlines_path
             )
             return cellpose_outlines
-
-    def save_global_cellpose_outlines(
-        self,
-        outlines: dict,
-    ) -> None:
-        pass
 
     def load_global_cellpose_segmentation_image(
         self,
@@ -3077,16 +3045,25 @@ class qi2labDataStore:
         except subprocess.CalledProcessError as e:
             print("Baysor failed with:", e)
         
-        run_baysor_options = r"run -p -c " +str(self._baysor_options)
-        command = julia_threading + str(self._baysor_path) + " " + run_baysor_options + " " +\
-            str(baysor_input_path) + " -o " + str(baysor_output_path) + " --count-matrix-format tsv"
-                    
+        # first try to run Baysor assuming that prior segmentations are present               
         try:
+            run_baysor_options = r"run -p -c " +str(self._baysor_options)
+            command = julia_threading + str(self._baysor_path) + " " + run_baysor_options + " " +\
+                str(baysor_input_path) + " -o " + str(baysor_output_path) + " --count-matrix-format tsv :cell_id"
             result = subprocess.run(command, shell=True, check=True)
             print("Baysor finished with return code:", result.returncode)
-        except subprocess.CalledProcessError as e:
-            print("Baysor failed with:", e)
-
+        except subprocess.CalledProcessError:
+            # then fall back and run without prior segmentations.
+            # IMPORTANT: the .toml file has to be defined correctly for this to work!
+            try:
+                run_baysor_options = r"run -p -c " +str(self._baysor_options)
+                command = julia_threading + str(self._baysor_path) + " " + run_baysor_options + " " +\
+                    str(baysor_input_path) + " -o " + str(baysor_output_path) + " --count-matrix-format tsv"
+                result = subprocess.run(command, shell=True, check=True)
+                print("Baysor finished with return code:", result.returncode)
+            except subprocess.CalledProcessError as e:
+                print("Baysor failed with:", e)
+                
     def load_global_baysor_filtered_spots(
         self,
     ) -> Optional[pd.DataFrame]:

@@ -1,7 +1,8 @@
 """
-Perform registration on Human OB qi2labdatastore.
+Perform registration on Human OB qi2labdatastore. By default creates a max 
+projection downsampled polyDT OME-TIFF for cellpose parameter optimization.
 
-Shepherd 2024/11 - rework script to accept parameters in registration functions
+Shepherd 2024/11 - rework script to accept parameters.
 Shepherd 2024/08 - rework script to utilized qi2labdatastore object.
 """
 
@@ -10,11 +11,11 @@ from merfish3danalysis.postprocess.DataRegistration import DataRegistration
 from pathlib import Path
 import numpy as np
 import gc
-
 from tqdm import tqdm
+from tifffile import TiffWriter
+from typing import Optional
 
-
-def local_register_data(root_path):
+def local_register_data(root_path: Path):
     """Register each tile across rounds in local coordinates.
 
     Parameters
@@ -41,13 +42,20 @@ def local_register_data(root_path):
     datastore.datastore_state = datastore_state
 
 
-def global_register_data(root_path):
+def global_register_data(
+    root_path : Path, 
+    create_max_proj_tiff: Optional[bool] = True
+):
     """Register all tiles in first round in global coordinates.
 
     Parameters
     ----------
     root_path: Path
         path to experiment
+    
+    create_max_proj_tiff: Optional[bool]
+        create max projection tiff in the segmentation/cellpose directory. 
+        Default = True
     """
 
     from multiview_stitcher import spatial_image_utils as si_utils
@@ -195,8 +203,44 @@ def global_register_data(root_path):
     datastore_state.update({"GlobalRegistered": True})
     datastore_state.update({"Fused": True})
     datastore.datastore_state = datastore_state
-
-
+    
+    # write max projection OME-TIFF for cellpose GUI
+    if create_max_proj_tiff:
+        # load downsampled, fused polyDT image and coordinates 
+        polyDT_fused, _, _, spacing_zyx_um = datastore.load_global_fidicual_image(return_future=False)
+        
+        # create max projection
+        polyDT_max_projection = np.max(np.squeeze(polyDT_fused),axis=0)
+        del polyDT_fused
+        
+        filename = 'polyDT_max_projection.ome.tiff'
+        filename_path = datastore._datastore_path / Path("segmentation") / Path("cellpose") / Path(filename)
+        with TiffWriter(filename_path, bigtiff=True) as tif:
+            metadata={
+                'axes': 'YX',
+                'SignificantBits': 16,
+                'PhysicalSizeX': spacing_zyx_um[2],
+                'PhysicalSizeXUnit': 'µm',
+                'PhysicalSizeY': spacing_zyx_um[1],
+                'PhysicalSizeYUnit': 'µm',
+            }
+            options = dict(
+                compression='zlib',
+                compressionargs={'level': 8},
+                predictor=True,
+                photometric='minisblack',
+                resolutionunit='CENTIMETER',
+            )
+            tif.write(
+                polyDT_max_projection,
+                resolution=(
+                    1e4 / spacing_zyx_um[1],
+                    1e4 / spacing_zyx_um[2]
+                ),
+                **options,
+                metadata=metadata
+            )
+    
 if __name__ == "__main__":
     root_path = Path(r"/mnt/data/bartelle/20241108_Bartelle_MouseMERFISH_LC")
     local_register_data(root_path)

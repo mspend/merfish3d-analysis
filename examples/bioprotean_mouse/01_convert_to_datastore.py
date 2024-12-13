@@ -9,7 +9,7 @@ extract the correct parameters.
 
 Required user parameters for system dependent variables are at end of script.
 
-Shepherd 2024/11 - small changes to make versioning easier.
+Shepherd 2024/11 - rework script to accept parameters.
 Shepherd 2024/08 - rework script to utilize qi2labdatastore object.
 """
 
@@ -24,7 +24,6 @@ from merfish3danalysis.utils._dataio import read_metadatafile
 from merfish3danalysis.utils._imageprocessing import replace_hot_pixels
 from itertools import compress
 from typing import Optional
-
 
 def convert_data(
     root_path: Path,
@@ -476,14 +475,13 @@ def convert_data(
     datastore_state.update({"Corrected": True})
     datastore.datastore_state = datastore_state
 
-
 if __name__ == "__main__":
     root_path = Path(r"/mnt/data/bartelle/20241108_Bartelle_MouseMERFISH_LC")
     baysor_binary_path = Path(
         r"/home/qi2lab/Documents/github/Baysor/bin/baysor/bin/./baysor"
     )
     baysor_options_path = Path(
-        r"/home/qi2lab/Documents/github/merfish3d-analysis/qi2lab.toml"
+        r"/home/qi2lab/Documents/github/merfish3d-analysis/examples/bioprotean_mouse/bioprotean_mouse.toml"
     )
     julia_threads = 20
 
