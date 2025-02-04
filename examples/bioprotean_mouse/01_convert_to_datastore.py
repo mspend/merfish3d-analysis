@@ -511,7 +511,7 @@ def convert_data(
     datastore.datastore_state = datastore_state
 
 if __name__ == "__main__":
-    root_path = Path(r"/mnt/data/bartelle/20241108_Bartelle_MouseMERFISH_LC")
+    root_path = Path(r"/data/smFISH/12062024_Bartelle24hrcryo_sample2")
     baysor_binary_path = Path(
         r"/home/qi2lab/Documents/github/Baysor/bin/baysor/bin/./baysor"
     )
@@ -520,7 +520,7 @@ if __name__ == "__main__":
     )
     julia_threads = 20
 
-    hot_pixel_image_path = Path(r"/home/qi2lab/Documents/github/merfish3d-analysis/examples/hot_pixel_flir.tif")
+    hot_pixel_image_path = Path(r"/data/smFISH/hot_pixel_image.tif")
 
     convert_data(
         root_path=root_path,
