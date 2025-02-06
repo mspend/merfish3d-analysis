@@ -1,8 +1,13 @@
-"""
-Perform registration on Human OB qi2labdatastore. By default creates a max 
-projection downsampled polyDT OME-TIFF for cellpose parameter optimization.
+"""Generate deconvolved data and create "fake" local tile registrations.
 
-Shepherd 2024/11 - rework script to accept parameters.
+In this example, we  bypass the standard "DataRegistration" API because 
+the Zhuang MOP data is already registered and warped.
+
+For polyDT data, only round 1 is deconvolved. A rigid xyz transform
+consisting of all zeros is added to all tiles & rounds for the polyDT data.
+
+For readout data, all tiles and bits are deconvolved plus u-fish predicted.
+
 Shepherd 2024/08 - rework script to utilized qi2labdatastore object.
 """
 
@@ -31,7 +36,7 @@ def local_register_data(root_path: Path):
     # initialize registration class
     registration_factory = DataRegistration(
         datastore=datastore, 
-        perform_optical_flow=True, 
+        perform_optical_flow=False, 
         overwrite_registered=True,
         save_all_polyDT_registered=False
     )
@@ -45,6 +50,7 @@ def local_register_data(root_path: Path):
     datastore.datastore_state = datastore_state
 
 
+
 def global_register_data(
     root_path : Path, 
     create_max_proj_tiff: Optional[bool] = True
@@ -56,11 +62,10 @@ def global_register_data(
     root_path: Path
         path to experiment
     
-    create_max_proj_tiff: Optional[bool]
-        create max projection tiff in the segmentation/cellpose directory. 
-        Default = True
+    create_max_proj_tiff: Optional[bool], default True
+        create max projection tiff in the segmentation/cellpose directory.
     """
-
+    
     from multiview_stitcher import spatial_image_utils as si_utils
     from multiview_stitcher import msi_utils, registration, fusion
     import dask.diagnostics
@@ -91,9 +96,9 @@ def global_register_data(
         )
 
         tile_grid_positions = {
-            "z": np.round(tile_position_zyx_um[0], 2),
-            "y": np.round(tile_position_zyx_um[1], 2),
-            "x": np.round(tile_position_zyx_um[2], 2),
+            "z": 0.0, # the data does not contain z positions, so we center at 0.
+            "y": np.round(tile_position_zyx_um[0], 2),
+            "x": np.round(tile_position_zyx_um[1], 2),
         }
 
         im_data = []
@@ -114,33 +119,15 @@ def global_register_data(
         del im_data
         gc.collect()
 
-    # perform registration in three steps, from most downsampling to least.
+    # perform registration
     with dask.config.set(**{"array.slicing.split_large_chunks": False}):
         with dask.diagnostics.ProgressBar():
             _ = registration.register(
                 msims,
                 reg_channel_index=0,
                 transform_key="stage_metadata",
-                new_transform_key="translation_registered_4x",
-                registration_binning={"z": 4, "y": 12, "x": 12},
-                post_registration_do_quality_filter=False,
-            )
-
-            _ = registration.register(
-                msims,
-                reg_channel_index=0,
-                transform_key="translation_registered_4x",
-                new_transform_key="translation_registered_3x",
-                registration_binning={"z": 3, "y": 9, "x": 9},
-                post_registration_do_quality_filter=True,
-            )
-
-            _ = registration.register(
-                msims,
-                reg_channel_index=0,
-                transform_key="translation_registered_3x",
                 new_transform_key="translation_registered",
-                registration_binning={"z": 1, "y": 3, "x": 3},
+                registration_binning={"z": 3, "y": 3, "x": 3},
                 post_registration_do_quality_filter=True,
             )
 
@@ -171,8 +158,8 @@ def global_register_data(
             transform_key="translation_registered",
             output_spacing={
                 "z": voxel_zyx_um[0],
-                "y": voxel_zyx_um[1] * np.round(voxel_zyx_um[0] / voxel_zyx_um[1], 1),
-                "x": voxel_zyx_um[2] * np.round(voxel_zyx_um[0] / voxel_zyx_um[2], 1),
+                "y": voxel_zyx_um[1] * 3.5,
+                "x": voxel_zyx_um[2] * 3.5,
             },
             output_chunksize=128,
             overlap_in_pixels=64,
@@ -245,8 +232,8 @@ def global_register_data(
                 **options,
                 metadata=metadata
             )
-    
+
 if __name__ == "__main__":
-    root_path = Path(r"/mnt/data/bartelle/20241108_Bartelle_MouseMERFISH_LC")
-    local_register_data(root_path)
-    global_register_data(root_path)
+    root_path = Path(r"/mnt/data/zhuang/")
+    #local_register_data(root_path)
+    global_register_data(root_path,create_max_proj_tiff=True)

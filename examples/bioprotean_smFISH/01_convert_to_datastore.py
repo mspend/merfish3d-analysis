@@ -1,5 +1,5 @@
 """
-Convert raw qi2lab WF MERFISH data to qi2labdatastore.
+Convert raw qi2lab WF smFISH data to qi2labdatastore.
 
 This is an example on how to convert a qi2lab experiment to the datastore
 object that the qi2lab "merfish3d-analysis" package uses. Most of the
@@ -50,19 +50,19 @@ def convert_data(
         path to baysor options toml
     julia_threads: int
         number of threads to use for Julia
-    channel_names: list[str]
+    channel_names: list[str], default ["alexa488", "atto565", "alexa647"]
         name of dye molecules used in ascending order of wavelength
-    hot_pixel_image_path: Optional[Path]
-        path to hot pixel map. Default is None
-    output_path: Optional[Path]
-        path to output directory. Default is None and will be created
+    hot_pixel_image_path: Optional[Path], default None
+        path to hot pixel map. Default of `None` will set it to all zeros.
+    output_path: Optional[Path], default None
+        path to output directory. Default of `None` and will be created
         within the root_path
-    codebook_path: Optional[Path]
-        path to codebook. Default is None and it assumed the file is in
+    codebook_path: Optional[Path], default None
+        path to codebook. Default of `None` assumes the file is in
         the root_path.
-    bit_order_path: Optional[Path]
+    bit_order_path: Optional[Path], default None
         path to bit order file. This file defines what bits are present in each
-        imaging round, in channel order. Default is None and it assumed
+        imaging round, in channel order. Default of `None` assumes
         the file is in the root_path.
     """
 
@@ -91,9 +91,6 @@ def convert_data(
     num_tiles = metadata["num_xyz"]
     num_ch = metadata["num_ch"]
 
-    # this entry was not contained in pre-v8 microscope csv, it was instead stored
-    # in the imaging data itself. We added it to > v8 qi2lab-scope metadata csv to make the
-    # access pattern easier.
     from ndstorage import Dataset
 
     # load first tile to get experimental metadata
@@ -512,16 +509,17 @@ def convert_data(
     datastore.datastore_state = datastore_state
 
 if __name__ == "__main__":
-    root_path = Path(r"/data/smFISH/12062024_Bartelle24hrcryo_sample2")
+    root_path = Path(r"/mnt/data2/bioprotean/20241206_Bartelle24hrcryo_sample2")
     baysor_binary_path = Path(
         r"/home/qi2lab/Documents/github/Baysor/bin/baysor/bin/./baysor"
     )
     baysor_options_path = Path(
-        r"/home/qi2lab/Documents/github/merfish3d-analysis/examples/bioprotean_mouse/bioprotean_mouse.toml"
+        r"/home/qi2lab/Documents/github/merfish3d-analysis/examples/human_olfactorybulb/qi2lab_humanOB.toml"
     )
     julia_threads = 20
 
-    hot_pixel_image_path = Path(r"/data/smFISH/hot_pixel_image.tif")
+    hot_pixel_image_path = None
+    #hot_pixel_image_path = Path(r"/mnt/data/qi2lab/20240317_OB_MERFISH_7/flir_hot_pixel_image.tif")
 
     convert_data(
         root_path=root_path,

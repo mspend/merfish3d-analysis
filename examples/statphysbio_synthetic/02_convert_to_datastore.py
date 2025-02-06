@@ -90,10 +90,13 @@ def convert_data(
     num_rounds = metadata["num_r"]
     num_tiles = metadata["num_xyz"]
     num_ch = metadata["num_ch"]
-   
+    
     try:
         camera = metadata["camera"]
     except Exception:
+        camera = None
+        
+    if not(camera == "simulated"):
         from ndstorage import Dataset
 
         # load first tile to get experimental metadata
@@ -126,13 +129,17 @@ def convert_data(
         metadata["red_active"],
     ]
     try:
-        channels_reversed = metadata["channels_reversed"]
-        if channels_reversed:
+        channel_order_bool = metadata["channels_reversed"]
+        if channel_order_bool:
             channel_order = "reversed"
         else:
             channel_order = "forward"
-    except Exception:
-        channel_order = metadata["channel_order"]
+    except KeyError:
+        if not(camera=="simulated"):
+            if (dataset.get_image_coordinates_list()[0]["channel"]) == "F-Blue":
+                channel_order = "forward"
+            else:
+                channel_order = "reversed"
 
     # this entry was not contained in pre-v8 microscope csv, it was instead stored
     # in the imaging data itself. We added it to > v8 metadata csv to make the
@@ -142,18 +149,19 @@ def convert_data(
         z_pixel_um = voxel_size_zyx_um[0]
         yx_pixel_um = voxel_size_zyx_um[1]
     except Exception:
-        yx_pixel_um = np.round(float(ndtiff_metadata["PixelSizeUm"]), 3)
-        next_ndtiff_metadata = dataset.read_metadata(channel=channel_to_test, z=1)
-        z_pixel_um = np.round(
-            np.abs(
-                float(next_ndtiff_metadata["ZPosition_um_Intended"])
-                - float(ndtiff_metadata["ZPosition_um_Intended"])
-            ),
-            3,
-        )
-        voxel_size_zyx_um = [z_pixel_um, yx_pixel_um, yx_pixel_um]
+        if not(camera=="simulated"):
+            yx_pixel_um = np.round(float(ndtiff_metadata["PixelSizeUm"]), 3)
+            next_ndtiff_metadata = dataset.read_metadata(channel=channel_to_test, z=1)
+            z_pixel_um = np.round(
+                np.abs(
+                    float(next_ndtiff_metadata["ZPosition_um_Intended"])
+                    - float(ndtiff_metadata["ZPosition_um_Intended"])
+                ),
+                3,
+            )
+            voxel_size_zyx_um = [z_pixel_um, yx_pixel_um, yx_pixel_um]
 
-        del ndtiff_metadata, next_ndtiff_metadata, dataset
+            del ndtiff_metadata, next_ndtiff_metadata, dataset
 
     # this entry was not contained in pre-v8 metadata csv, it was instead stored
     # in the imaging data itself. We added it to > v8 metadata csv to make the
@@ -370,7 +378,29 @@ def convert_data(
 
             # load raw data and make sure it is the right shape. If not, write
             # zeros for this round/stage position.
-            raw_image = imread(image_path)
+            try:
+                raw_image = imread(image_path)
+            except Exception:
+                image_path = (
+                    root_path
+                    / Path(
+                        root_name
+                        + "_r"
+                        + str(round_idx + 1).zfill(4)
+                        + "_tile"
+                        + str(tile_idx).zfill(4)
+                        + "_1"
+                    )
+                    / Path(
+                        root_name
+                        + "_r"
+                        + str(round_idx + 1).zfill(4)
+                        + "_tile"
+                        + str(tile_idx).zfill(4)
+                        + ".tif"
+                    )
+                )
+                raw_image = imread(image_path)
             raw_image = np.swapaxes(raw_image, 0, 1)
             if tile_idx == 0 and round_idx == 0:
                 correct_shape = raw_image.shape
