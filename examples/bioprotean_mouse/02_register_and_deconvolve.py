@@ -170,9 +170,9 @@ def global_register_data(
             [msi_utils.get_sim_from_msim(msim, scale="scale0") for msim in msims],
             transform_key="translation_registered",
             output_spacing={
-                "z": 2*(voxel_zyx_um[0]),
-                "y": 2*(voxel_zyx_um[1] * np.round(voxel_zyx_um[0] / voxel_zyx_um[1], 1)),
-                "x": 2*(voxel_zyx_um[2] * np.round(voxel_zyx_um[0] / voxel_zyx_um[2], 1)),
+                "z": 3*(voxel_zyx_um[0]),
+                "y": 3*(voxel_zyx_um[1] * np.round(voxel_zyx_um[0] / voxel_zyx_um[1], 1)),
+                "x": 3*(voxel_zyx_um[2] * np.round(voxel_zyx_um[0] / voxel_zyx_um[2], 1)),
             },
             output_chunksize=128,
             overlap_in_pixels=64,
