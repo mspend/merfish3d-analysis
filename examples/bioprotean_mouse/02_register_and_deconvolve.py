@@ -170,9 +170,9 @@ def global_register_data(
             [msi_utils.get_sim_from_msim(msim, scale="scale0") for msim in msims],
             transform_key="translation_registered",
             output_spacing={
-                "z": voxel_zyx_um[0],
-                "y": voxel_zyx_um[1] * np.round(voxel_zyx_um[0] / voxel_zyx_um[1], 1),
-                "x": voxel_zyx_um[2] * np.round(voxel_zyx_um[0] / voxel_zyx_um[2], 1),
+                "z": 2*(voxel_zyx_um[0]),
+                "y": 2*(voxel_zyx_um[1] * np.round(voxel_zyx_um[0] / voxel_zyx_um[1], 1)),
+                "x": 2*(voxel_zyx_um[2] * np.round(voxel_zyx_um[0] / voxel_zyx_um[2], 1)),
             },
             output_chunksize=128,
             overlap_in_pixels=64,
@@ -248,5 +248,5 @@ def global_register_data(
     
 if __name__ == "__main__":
     root_path = Path(r"/data/smFISH/12062024_Bartelle24hrcryo_sample2")
-    local_register_data(root_path)
+    # local_register_data(root_path)
     global_register_data(root_path)
