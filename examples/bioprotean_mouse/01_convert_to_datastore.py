@@ -512,7 +512,7 @@ def convert_data(
     datastore.datastore_state = datastore_state
 
 if __name__ == "__main__":
-    root_path = Path(r"/data/smFISH/12062024_Bartelle24hrcryo_sample2")
+    root_path = Path(r"/data/smFISH/01292025_Bartelle_smFISH_control")
     baysor_binary_path = Path(
         r"/home/qi2lab/Documents/github/Baysor/bin/baysor/bin/./baysor"
     )
