@@ -212,7 +212,7 @@ def global_register_data(
         # load downsampled, fused polyDT image and coordinates 
         polyDT_fused, _, _, spacing_zyx_um = datastore.load_global_fidicual_image(return_future=False)
        
-        # slice first 10 z-stacks of polyDT_fused
+        # slice last 10 z-stacks of polyDT_fused
         polyDT_fused_sliced = polyDT_fused[:,:,-10:,:,:]
         print(polyDT_fused_sliced.shape)
 
