@@ -213,42 +213,42 @@ def global_register_data(
         polyDT_fused, _, _, spacing_zyx_um = datastore.load_global_fidicual_image(return_future=False)
        
         # slice first 10 z-stacks of polyDT_fused
-        polyDT_fused_sliced = polyDT_fused[:,:,0:10,:,:]
+        polyDT_fused_sliced = polyDT_fused[:,:,-10:,:,:]
         print(polyDT_fused_sliced.shape)
 
         # create max projection
         polyDT_max_projection = np.max(np.squeeze(polyDT_fused_sliced),axis=0)
-        # del polyDT_fused
+        del polyDT_fused
        
-        # filename = 'polyDT_max_projection.ome.tiff'
-        # cellpose_path = datastore._datastore_path / Path("segmentation") / Path("cellpose")
-        # cellpose_path.mkdir(exist_ok=True)
-        # filename_path = datastore._datastore_path / Path("segmentation") / Path("cellpose") / Path(filename)
-        # with TiffWriter(filename_path, bigtiff=True) as tif:
-        #     metadata={
-        #         'axes': 'YX',
-        #         'SignificantBits': 16,
-        #         'PhysicalSizeX': spacing_zyx_um[2],
-        #         'PhysicalSizeXUnit': 'µm',
-        #         'PhysicalSizeY': spacing_zyx_um[1],
-        #         'PhysicalSizeYUnit': 'µm',
-        #     }
-        #     options = dict(
-        #         compression='zlib',
-        #         compressionargs={'level': 8},
-        #         predictor=True,
-        #         photometric='minisblack',
-        #         resolutionunit='CENTIMETER',
-        #     )
-        #     tif.write(
-        #         polyDT_max_projection,
-        #         resolution=(
-        #             1e4 / spacing_zyx_um[1],
-        #             1e4 / spacing_zyx_um[2]
-        #         ),
-        #         **options,
-        #         metadata=metadata
-        #     )
+        filename = 'polyDT_max_projection_last10z.ome.tiff'
+        cellpose_path = datastore._datastore_path / Path("segmentation") / Path("cellpose")
+        cellpose_path.mkdir(exist_ok=True)
+        filename_path = datastore._datastore_path / Path("segmentation") / Path("cellpose") / Path(filename)
+        with TiffWriter(filename_path, bigtiff=True) as tif:
+            metadata={
+                'axes': 'YX',
+                'SignificantBits': 16,
+                'PhysicalSizeX': spacing_zyx_um[2],
+                'PhysicalSizeXUnit': 'µm',
+                'PhysicalSizeY': spacing_zyx_um[1],
+                'PhysicalSizeYUnit': 'µm',
+            }
+            options = dict(
+                compression='zlib',
+                compressionargs={'level': 8},
+                predictor=True,
+                photometric='minisblack',
+                resolutionunit='CENTIMETER',
+            )
+            tif.write(
+                polyDT_max_projection,
+                resolution=(
+                    1e4 / spacing_zyx_um[1],
+                    1e4 / spacing_zyx_um[2]
+                ),
+                **options,
+                metadata=metadata
+            )
     
 if __name__ == "__main__":
     root_path = Path(r"/data/smFISH/12062024_Bartelle24hrcryo_sample2")
