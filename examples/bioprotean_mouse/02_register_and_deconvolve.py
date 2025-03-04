@@ -211,13 +211,15 @@ def global_register_data(
     if create_max_proj_tiff:
         # load downsampled, fused polyDT image and coordinates 
         polyDT_fused, _, _, spacing_zyx_um = datastore.load_global_fidicual_image(return_future=False)
-        
-        print(polyDT_fused.shape)
+       
+        # slice first 10 z-stacks of polyDT_fused
+        polyDT_fused_sliced = polyDT_fused[:,:,0:10,:,:]
+        print(polyDT_fused_sliced.shape)
 
-        # # create max projection
-        # polyDT_max_projection = np.max(np.squeeze(polyDT_fused),axis=0)
+        # create max projection
+        polyDT_max_projection = np.max(np.squeeze(polyDT_fused_sliced),axis=0)
         # del polyDT_fused
-        
+       
         # filename = 'polyDT_max_projection.ome.tiff'
         # cellpose_path = datastore._datastore_path / Path("segmentation") / Path("cellpose")
         # cellpose_path.mkdir(exist_ok=True)
