@@ -247,6 +247,6 @@ def global_register_data(
             )
     
 if __name__ == "__main__":
-    root_path = Path(r"/data/smFISH/12062024_Bartelle24hrcryo_sample2")
-    # local_register_data(root_path)
+    root_path = Path(r"/data/smFISH/01292025_Bartelle_smFISH_control")
+    local_register_data(root_path)
     global_register_data(root_path)
