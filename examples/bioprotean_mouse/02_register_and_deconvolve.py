@@ -220,7 +220,7 @@ def global_register_data(
         polyDT_max_projection = np.max(np.squeeze(polyDT_fused_sliced),axis=0)
         del polyDT_fused
        
-        filename = 'polyDT_max_projection_last10z.ome.tiff'
+        filename = 'polyDT_max_projection_Z9-14.ome.tiff'
         cellpose_path = datastore._datastore_path / Path("segmentation") / Path("cellpose")
         cellpose_path.mkdir(exist_ok=True)
         filename_path = datastore._datastore_path / Path("segmentation") / Path("cellpose") / Path(filename)
