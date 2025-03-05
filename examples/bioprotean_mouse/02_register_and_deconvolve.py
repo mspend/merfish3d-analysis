@@ -213,7 +213,7 @@ def global_register_data(
         polyDT_fused, _, _, spacing_zyx_um = datastore.load_global_fidicual_image(return_future=False)
        
         # slice last 10 z-stacks of polyDT_fused
-        polyDT_fused_sliced = polyDT_fused[:,:,-10:,:,:]
+        polyDT_fused_sliced = polyDT_fused[:,:,9:14,:,:]
         print(polyDT_fused_sliced.shape)
 
         # create max projection
