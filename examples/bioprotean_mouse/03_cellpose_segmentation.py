@@ -135,12 +135,12 @@ def run_cellpose(root_path,
     pixel_spacing_rois = roiwrite(global_roi_path,global_spacing_rois)
         
 if __name__ == "__main__":
-    root_path = Path(r"/mnt/data/bartelle/20241108_Bartelle_MouseMERFISH_LC")
+    root_path = Path(r"/data/smFISH/12062024_Bartelle24hrcryo_sample2")
     cellpose_parameters = {
-        'normalization' : [0.5,95.0],
-        'blur_kernel_size' : 2.0,
-        'flow_threshold' : 0.4,
+        'normalization' : [1.0,95.0],
+        'blur_kernel_size' : 0.0,
+        'flow_threshold' : 0.6,
         'cellprob_threshold' : 0.0,
-        'diameter': 50.0
+        'diameter': 17.1
     }
     run_cellpose(root_path, cellpose_parameters)
