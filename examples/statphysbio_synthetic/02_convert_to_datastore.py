@@ -23,7 +23,7 @@ from psfmodels import make_psf
 from tifffile import imread
 from tqdm import tqdm
 from merfish3danalysis.utils.dataio import read_metadatafile
-from merfish3danalysis.utils.imageprocessing import replace_hot_pixels
+from merfish3danalysis.utils.imageprocessing import replace_hot_pixels, estimate_shading
 from itertools import compress
 from typing import Optional
 
@@ -428,9 +428,7 @@ def convert_data(
                 raw_image = np.flip(raw_image, axis=3)
 
             # Correct for known camera gain and offset
-            raw_image = (raw_image.astype(np.float32) - offset) * e_per_ADU
-            raw_image[raw_image < 0.0] = 0.0
-            raw_image = raw_image.astype(np.uint16)
+            raw_image = ((raw_image.astype(np.float32) - offset) * e_per_ADU).clip(0,2**16-1).astype(np.uint16)
             gain_corrected = True
 
             # Correct for known hot pixel map
@@ -484,9 +482,9 @@ def convert_data(
                 shading_correction=False,
                 round=round_idx,
             )
-
+            affine_zyx_px = np.eye(4)
             datastore.save_local_stage_position_zyx_um(
-                stage_pos_zyx_um, tile=tile_idx, round=round_idx
+                stage_pos_zyx_um, affine_zyx_px, tile=tile_idx, round=round_idx
             )
 
             datastore.save_local_wavelengths_um(
@@ -532,7 +530,7 @@ def convert_data(
     datastore.datastore_state = datastore_state
 
 if __name__ == "__main__":
-    root_path = Path(r"/mnt/opm3/20241218_statphysbio/sim_acquisition")
+    root_path = Path(r"/mnt/data/presse/max_simdata/local_ztest_3_dz_1/sim_acquisition")
     baysor_binary_path = None
     baysor_options_path = None
     julia_threads = 20
