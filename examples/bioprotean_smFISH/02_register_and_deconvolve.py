@@ -243,6 +243,6 @@ def global_register_data(
             )
     
 if __name__ == "__main__":
-    root_path = Path(r"/mnt/data2/bioprotean/20250220_Bartelle_control_smFISH_TqIB")
+    root_path = Path(r"/data/smFISH/02202025_Bartelle_control_smFISH_TqIB")
     local_register_data(root_path)
     global_register_data(root_path,create_max_proj_tiff=True)
