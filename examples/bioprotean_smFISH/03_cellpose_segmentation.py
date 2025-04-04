@@ -142,12 +142,12 @@ def run_cellpose(root_path,
     pixel_spacing_rois = roiwrite(global_roi_path,global_spacing_rois)
         
 if __name__ == "__main__":
-    root_path = Path(r"/mnt/data2/bioprotean/20241206_Bartelle24hrcryo_sample2")
+    root_path = Path(r"/data/smFISH/02202025_Bartelle_control_smFISH_TqIB")
     cellpose_parameters = {
-        'normalization' : [0.5,95.0],
-        'blur_kernel_size' : 2.0,
+        'normalization' : [1.0,99.0],
+        'blur_kernel_size' : 0.0,
         'flow_threshold' : 0.4,
         'cellprob_threshold' : 0.0,
-        'diameter': 36.57
+        'diameter': 40.8
     }
     run_cellpose(root_path, cellpose_parameters)
