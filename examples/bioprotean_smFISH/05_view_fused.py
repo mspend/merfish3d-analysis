@@ -68,5 +68,5 @@ def view_fused(root_path: Path):
     napari.run()
     
 if __name__ == "__main__":
-    root_path = Path(r"/mnt/data2/bioprotean/20250220_Bartelle_control_smFISH_TqIB")
+    root_path = Path(r"/data/smFISH/02202025_Bartelle_control_smFISH_TqIB")
     view_fused(root_path)
