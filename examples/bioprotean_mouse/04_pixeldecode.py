@@ -75,5 +75,5 @@ def decode_pixels(
         datastore.save_mtx()
 
 if __name__ == "__main__":
-    root_path = Path(r"/data/smFISH/12062024_Bartelle24hrcryo_sample2")
+    root_path = Path(r"/data/smFISH/02202025_Bartelle_control_smFISH_TqIB")
     decode_pixels(root_path=root_path,run_baysor=False)
