@@ -189,6 +189,7 @@ class PixelDecoder:
         use_mask: Optional[bool] = False,
         z_range: Optional[Sequence[int]] = None,
         include_blanks: Optional[bool] = True,
+        smISH: bool = False
     ):
         self._datastore_path = Path(datastore._datastore_path)
         self._datastore = datastore
@@ -198,6 +199,10 @@ class PixelDecoder:
         self._include_blanks = include_blanks
 
         self._n_merfish_bits = merfish_bits
+        
+        # Is the data smFISH or MERFISH?
+        # default is False, meaning default is MERFISH
+        self._smFISH = smFISH
 
         if self._datastore.microscope_type == "2D":
             self._is_3D = False
