@@ -189,7 +189,7 @@ class PixelDecoder:
         use_mask: Optional[bool] = False,
         z_range: Optional[Sequence[int]] = None,
         include_blanks: Optional[bool] = True,
-        smISH: bool = False
+        smFISH: bool = False
     ):
         self._datastore_path = Path(datastore._datastore_path)
         self._datastore = datastore
@@ -229,8 +229,13 @@ class PixelDecoder:
         self._optimize_normalization_weights = False
         self._global_normalization_loaded = False
         self._iterative_normalization_loaded = False
-        self._distance_threshold = 0.5172  # default for HW4D4 code. TO DO: calculate based on self._num_on-bits
-        self._magnitude_threshold = (1.1,2.0)  # default for HW4D4 code
+
+        if self._smFISH:
+            self._distance_threshold = 1.0            
+            self._magnitude_threshold = (0.75,1.75)
+        else:
+            self._distance_threshold = 0.5172  # default for HW4D4 code. TO DO: calculate based on self._num_on-bits
+            self._magnitude_threshold = (1.1,2.0)  # default for HW4D4 code
 
     def _load_codebook(self):
         """Load and parse codebook into gene_id and codeword matrix."""
@@ -970,6 +975,14 @@ class PixelDecoder:
         """
 
         with cp.cuda.Device(gpu_id):
+            if distance_threshold is None:
+                distance_threshold = self._distance_threshold
+            if magnitude_threshold is None:
+                magnitude_threshold = self._magnitude_threshold
+
+            print(f"The distance threshold is {self._distance_threshold}")
+            print(f"The lower magnitude threshold is {magnitude_threshold}")
+
             if self._filter_type == "lp":
                 original_shape = self._image_data_lp.shape
                 self._decoded_image = np.zeros((original_shape[1:]), dtype=np.int16)
