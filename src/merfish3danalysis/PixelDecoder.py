@@ -981,7 +981,7 @@ class PixelDecoder:
                 magnitude_threshold = self._magnitude_threshold
 
             print(f"The distance threshold is {self._distance_threshold}")
-            print(f"The lower magnitude threshold is {magnitude_threshold}")
+            print(f"The magnitude threshold is {magnitude_threshold}")
 
             if self._filter_type == "lp":
                 original_shape = self._image_data_lp.shape
