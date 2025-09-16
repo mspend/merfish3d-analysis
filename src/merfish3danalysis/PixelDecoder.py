@@ -59,6 +59,7 @@ def decode_tiles_worker(
     minimum_pixels,
     ufish_threshold,
     distance_threshold,
+    smFISH
 ):
     """Worker that runs decode_one_tile on a subset of tiles under one GPU."""
     import cupy as cp
@@ -74,6 +75,7 @@ def decode_tiles_worker(
         merfish_bits=merfish_bits, 
         num_gpus=1,
         verbose=0,
+        smFISH=smFISH
     )
 
     local_decoder._load_global_normalization_vectors(gpu_id=gpu_id)
@@ -239,6 +241,9 @@ class PixelDecoder:
         else:
             self._distance_threshold = 0.5172  # default for HW4D4 code. TO DO: calculate based on self._num_on-bits
             self._magnitude_threshold = (1.1,2.0)  # default for HW4D4 code
+
+        print('The distance threshold for the class is set to:', self._distance_threshold)
+        print('The magnitude threshold for the class is set to:', self._magnitude_threshold)
 
     def _load_codebook(self):
         """Load and parse codebook into gene_id and codeword matrix."""
@@ -962,8 +967,8 @@ class PixelDecoder:
             return min_distances, min_indices
 
     def _decode_pixels(
-        self, distance_threshold: float = 0.5172, 
-        magnitude_threshold: Sequence[float] = (1.1, 2.0),
+        self, distance_threshold: float = None, 
+        magnitude_threshold: Sequence[float] = None,
         gpu_id: int = 0
     ):
         """Decode pixels using the decoding matrix.
@@ -973,15 +978,11 @@ class PixelDecoder:
         distance_threshold : float, default 0.5172.
             Distance threshold for decoding. The default is for a 4-bit,
             4-distance Hamming codebook.
-        magnitude_threshold : Sequence[float], default (1.1, 2.0).
+        magnitude_threshold : Sequence[float], default for MERFISH is (1.1, 2.0).
             Magnitude threshold for decoding. 
         """
 
         with cp.cuda.Device(gpu_id):
-            if distance_threshold is None:
-                distance_threshold = self._distance_threshold
-            if magnitude_threshold is None:
-                magnitude_threshold = self._magnitude_threshold
 
             print(f"The distance threshold is {distance_threshold}")
             print(f"The magnitude threshold is {magnitude_threshold}")
@@ -2274,7 +2275,7 @@ class PixelDecoder:
         display_results: bool = False,
         return_results: bool = False,
         lowpass_sigma: Optional[Sequence[float]] = (3, 1, 1),
-        magnitude_threshold: Optional[Sequence[float]] = (1.1,2.0),
+        magnitude_threshold: Optional[Sequence[float]] = None,
         distance_threshold: Optional[float] = None,
         minimum_pixels: Optional[float] = 3.0,
         use_normalization: Optional[bool] = True,
@@ -2362,7 +2363,8 @@ class PixelDecoder:
         minimum_pixels: float = 9.0,
         ufish_threshold: float = 0.1,
         lowpass_sigma: Optional[Sequence[float]] = (3, 1, 1),
-        magnitude_threshold: Optional[Sequence[float]] = (1.1, 2.0)
+        magnitude_threshold: Optional[Sequence[float]] = None,
+        distance_threshold: Optional[float] = None,
     ):
         """Optimize normalization by decoding.
 
@@ -2380,9 +2382,17 @@ class PixelDecoder:
             Ufish threshold. 
         lowpass_sigma : Optional[Sequence[float]], default (3, 1, 1)
             Lowpass sigma.
-        magnitude_threshold: Optional[Sequence[float], default (1.1,2.0)
+        magnitude_threshold: Optional[Sequence[float], default for MERFISH is (1.1,2.0)
             L2-norm threshold
-        """
+        """    
+        if distance_threshold is None:
+            distance_threshold = self._distance_threshold
+        if magnitude_threshold is None:
+            magnitude_threshold = self._magnitude_threshold
+
+        print('The distance threshold is set to:', distance_threshold)
+        print('The magnitude threshold is set to:', magnitude_threshold)
+        
         if self._num_gpus < 1:
             raise RuntimeError("No GPUs allocated.")
         all_tiles = list(range(len(self._datastore.tile_ids)))
@@ -2464,7 +2474,7 @@ class PixelDecoder:
         assign_to_cells: bool = True,
         prep_for_baysor: bool = True,
         lowpass_sigma: Optional[Sequence[float]] = (3, 1, 1),
-        magnitude_threshold: Optional[Sequence[float]] = (1.1,2.0),
+        magnitude_threshold: Optional[Sequence[float]] = None,
         minimum_pixels: Optional[float] = 3.0,
         ufish_threshold: Optional[float] = 0.25,
         fdr_target: Optional[float] = 0.05,
@@ -2514,6 +2524,7 @@ class PixelDecoder:
                     minimum_pixels,
                     ufish_threshold,
                     distance_threshold,
+                    smFISH 
                 ),
             )
             p.start()

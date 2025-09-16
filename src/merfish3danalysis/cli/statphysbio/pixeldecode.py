@@ -20,7 +20,9 @@ def decode_pixels(
     ufish_threshold: float = 0.1,
     magnitude_threshold: tuple[float,float] = (1.1, 2.0),
     distance_threshold: float = 0.5172,
-    fdr_target: float = .05
+    fdr_target: float = .05,
+    smFISH: bool = False,
+
 ):
     """Perform pixel decoding.
 
@@ -43,14 +45,18 @@ def decode_pixels(
     datastore = qi2labDataStore(datastore_path)
     merfish_bits = datastore.num_bits
 
+
     # initialize decodor class
     decoder = PixelDecoder(
         datastore=datastore, 
         merfish_bits=merfish_bits, 
         verbose=1,
         use_mask=False, 
-        smFISH=True, # Turn off for MERFISH
+        smFISH=smFISH,
     )
+
+    distance_threshold = decoder._distance_threshold 
+    magnitude_threshold = decoder._magnitude_threshold
 
     decoder.optimize_normalization_by_decoding(
         n_random_tiles=1,
