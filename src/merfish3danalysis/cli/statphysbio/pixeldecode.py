@@ -48,6 +48,7 @@ def decode_pixels(
         datastore=datastore, 
         use_mask=False, 
         merfish_bits=merfish_bits, 
+        smFISH=True, # Turn off for MERFISH
         verbose=1
     )
 
