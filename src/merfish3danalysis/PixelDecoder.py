@@ -58,6 +58,7 @@ def decode_tiles_worker(
     magnitude_threshold,
     minimum_pixels,
     ufish_threshold,
+    distance_threshold,
 ):
     """Worker that runs decode_one_tile on a subset of tiles under one GPU."""
     import cupy as cp
@@ -90,6 +91,7 @@ def decode_tiles_worker(
             ufish_threshold=ufish_threshold,
             use_normalization=True,
             gpu_id=gpu_id,
+            distance_threshold=distance_threshold,
         )
 
         local_decoder._save_barcodes()
@@ -231,6 +233,7 @@ class PixelDecoder:
         self._iterative_normalization_loaded = False
 
         if self._smFISH:
+            print("This is an smFISH experiment.")
             self._distance_threshold = 1.0            
             self._magnitude_threshold = (0.75,1.75)
         else:
@@ -980,7 +983,7 @@ class PixelDecoder:
             if magnitude_threshold is None:
                 magnitude_threshold = self._magnitude_threshold
 
-            print(f"The distance threshold is {self._distance_threshold}")
+            print(f"The distance threshold is {distance_threshold}")
             print(f"The magnitude threshold is {magnitude_threshold}")
 
             if self._filter_type == "lp":
@@ -2272,6 +2275,7 @@ class PixelDecoder:
         return_results: bool = False,
         lowpass_sigma: Optional[Sequence[float]] = (3, 1, 1),
         magnitude_threshold: Optional[Sequence[float]] = (1.1,2.0),
+        distance_threshold: Optional[float] = None,
         minimum_pixels: Optional[float] = 3.0,
         use_normalization: Optional[bool] = True,
         ufish_threshold: Optional[float] = 0.25,
@@ -2322,7 +2326,7 @@ class PixelDecoder:
             if not (np.any(lowpass_sigma == 0)):
                 self._lp_filter(sigma=lowpass_sigma,gpu_id=gpu_id)
             self._decode_pixels(
-                distance_threshold=self._distance_threshold,
+                distance_threshold=distance_threshold,
                 magnitude_threshold=magnitude_threshold,
                 gpu_id=gpu_id
             )
@@ -2464,6 +2468,7 @@ class PixelDecoder:
         minimum_pixels: Optional[float] = 3.0,
         ufish_threshold: Optional[float] = 0.25,
         fdr_target: Optional[float] = 0.05,
+        distance_threshold: Optional[float] = None,
     ):
         """Optimize normalization by decoding.
 
@@ -2508,6 +2513,7 @@ class PixelDecoder:
                     magnitude_threshold,
                     minimum_pixels,
                     ufish_threshold,
+                    distance_threshold,
                 ),
             )
             p.start()

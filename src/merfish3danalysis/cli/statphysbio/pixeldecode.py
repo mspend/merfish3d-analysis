@@ -19,6 +19,7 @@ def decode_pixels(
     minimum_pixels_per_RNA: int = 3,
     ufish_threshold: float = 0.1,
     magnitude_threshold: tuple[float,float] = (1.1, 2.0),
+    distance_threshold: float = 0.5172,
     fdr_target: float = .05
 ):
     """Perform pixel decoding.
@@ -81,6 +82,7 @@ def decode_pixels(
         magnitude_threshold=magnitude_threshold,
         minimum_pixels=minimum_pixels_per_RNA,
         ufish_threshold=ufish_threshold,
+        distance_threshold=distance_threshold,
         fdr_target=fdr_target
     )
     
