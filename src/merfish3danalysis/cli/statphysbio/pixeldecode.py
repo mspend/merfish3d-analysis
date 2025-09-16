@@ -63,7 +63,8 @@ def decode_pixels(
         n_iterations=10,
         magnitude_threshold=magnitude_threshold,
         minimum_pixels=minimum_pixels_per_RNA,
-        ufish_threshold=ufish_threshold
+        ufish_threshold=ufish_threshold,
+        smFISH=smFISH,
     )
         
     """
@@ -89,8 +90,8 @@ def decode_pixels(
         magnitude_threshold=magnitude_threshold,
         minimum_pixels=minimum_pixels_per_RNA,
         ufish_threshold=ufish_threshold,
-        distance_threshold=distance_threshold,
-        fdr_target=fdr_target
+        fdr_target=fdr_target,
+        smFISH=smFISH,
     )
     
 def main():
