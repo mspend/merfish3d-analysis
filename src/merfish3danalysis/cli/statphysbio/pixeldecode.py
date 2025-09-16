@@ -46,10 +46,10 @@ def decode_pixels(
     # initialize decodor class
     decoder = PixelDecoder(
         datastore=datastore, 
-        use_mask=False, 
         merfish_bits=merfish_bits, 
+        verbose=1,
+        use_mask=False, 
         smFISH=True, # Turn off for MERFISH
-        verbose=1
     )
 
     decoder.optimize_normalization_by_decoding(
