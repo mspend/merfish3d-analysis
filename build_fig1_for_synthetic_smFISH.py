@@ -304,8 +304,8 @@ def main(root_path: Path, sim_path: Path = "cells"):
         gt_gene_ids = codebook_genes[(gt_spots['Gene_label'].to_numpy(dtype=int)-1)]
         gt_offset = [
             0, 0, 0
-            (1*images[0].shape[-2]/2)*image_0315_voxel[1]-image_0315_voxel[1]/2,
-            (1*images[0].shape[-1]/2)*image_0315_voxel[2]-image_0315_voxel[2]/2
+            # (1*images[0].shape[-2]/2)*image_0315_voxel[1]-image_0315_voxel[1]/2,
+            # (1*images[0].shape[-1]/2)*image_0315_voxel[2]-image_0315_voxel[2]/2
         ]
 
         gt_coords = gt_coords + gt_offset
