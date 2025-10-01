@@ -77,7 +77,7 @@ def greedy_match_indices_within_radius(
         pair_d.append(coo.data)
 
     if not pair_q:
-        return np.empty((0,), int), np.empty((0,), int), np.arange(Nq, int), np.arange(Ng, int)
+        return np.empty((0,), int), np.empty((0,), int), np.arange(Nq, dtype=int), np.arange(Ng, dtype=int)
 
     pair_q = np.concatenate(pair_q)
     pair_g = np.concatenate(pair_g)
@@ -303,9 +303,9 @@ def main(root_path: Path, sim_path: Path = "cells"):
         gt_coords = gt_spots[['Z','X','Y']].to_numpy()
         gt_gene_ids = codebook_genes[(gt_spots['Gene_label'].to_numpy(dtype=int)-1)]
         gt_offset = [
-            0, 0, 0
-            # (1*images[0].shape[-2]/2)*image_0315_voxel[1]-image_0315_voxel[1]/2,
-            # (1*images[0].shape[-1]/2)*image_0315_voxel[2]-image_0315_voxel[2]/2
+            0, 
+            (0.5*images[0].shape[-2]/2)*image_0315_voxel[1]-image_0315_voxel[1]/2,
+            (0.5*images[0].shape[-1]/2)*image_0315_voxel[2]-image_0315_voxel[2]/2,
         ]
 
         gt_coords = gt_coords + gt_offset
@@ -419,5 +419,5 @@ def main(root_path: Path, sim_path: Path = "cells"):
 
 if __name__ == "__main__":
     root_path = Path(r"/Users/maurispendlove/Documents/merfish3d-analysis/paper_figure_revised")
-    sim_path = "flat" # "cells" or "flat" or ""
+    sim_path = "cells" # "cells" or "flat" or ""
     main(root_path,sim_path)
