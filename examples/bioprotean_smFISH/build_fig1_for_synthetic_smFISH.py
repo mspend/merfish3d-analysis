@@ -153,7 +153,7 @@ def main(root_path: Path, sim_path: Path = "example_16bit_cells"):
     points = []
     f1 = []
     for z in z_spacings:
-        temp = imread(top_path / Path(str(z)) / Path("sim_acquisition") / Path("data_r0001_tile0000_1") / Path("data_r0001_tile0000.tif"))
+        temp = imread(top_path / Path(str(z)) / Path("data_r0001_tile0000_1") / Path("data_r0001_tile0000.tif"))
         metadata = pd.read_csv(top_path / Path(str(z)) / Path("scan_metadata.csv"))
         print(float(metadata["axial_step_size [micron]"]))
         print(float(metadata["pixel_size [micron]"]))
@@ -188,7 +188,7 @@ def main(root_path: Path, sim_path: Path = "example_16bit_cells"):
         codebook = pd.read_csv(top_path / Path(str(z)) / Path("codebook.csv"))
         codebook_genes = codebook['gene_id'].to_numpy()
         
-        decoded_spots = pd.read_parquet(top_path / Path(str(z)) / Path("sim_acquisition") / Path("qi2labdatastore") / Path("all_tiles_filtered_decoded_features") / Path("decoded_features.parquet"))
+        decoded_spots = pd.read_parquet(top_path / Path(str(z))  / Path("decoded_features.parquet"))
         qi2lab_coords = decoded_spots[['global_z', 'global_y', 'global_x']].to_numpy()
         qi2lab_gene_ids = decoded_spots['gene_id'].to_numpy()
         gt_coords = gt_spots[['Z','X','Y']].to_numpy()
@@ -289,6 +289,6 @@ def main(root_path: Path, sim_path: Path = "example_16bit_cells"):
     napari.run()
 
 if __name__ == "__main__":
-    root_path = Path(r"/media/dps/data/max/mauri_less_crowded/mauri_flat")
-    sim_path = "example_smFISH_flat" # "cells" or "flat" or ""
+    root_path = Path(r"/data/smFISH/simulated_data/092225_less_crowded/paper_figure")
+    sim_path = "flat" # "cells" or "flat" or ""
     main(root_path,sim_path)
