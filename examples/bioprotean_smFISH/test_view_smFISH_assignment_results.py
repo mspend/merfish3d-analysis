@@ -4,8 +4,8 @@ from pathlib import Path
 import json
 import napari
 
-root_path = Path('/data/bioprotean/smFISH/20240423_ECL_24CryoA_2_PL025_restart/')
-dataset_path = root_path / Path('processed_v2')
+root_path = Path('/data/smFISH/prev_processed_0220_smFISH_data/')
+dataset_path = root_path / Path('qi2labdatastore')
 
 def load_microjson(filepath):
         with open(filepath, 'r') as f:
