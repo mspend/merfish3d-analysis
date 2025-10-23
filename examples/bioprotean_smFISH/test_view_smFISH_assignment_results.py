@@ -17,7 +17,10 @@ def load_microjson(filepath):
             coordinates = feature['geometry']['coordinates'][0]
             outlines[cell_id] = np.array(coordinates)
         return outlines
-    
+
+
+######## ISSUE: cellpose cell outlines are no longer stored in a json file like that.
+
 outlines_path = dataset_path / Path("segmentation") / Path("cellpose") / Path("cell_outlines.json")
 cell_outlines = load_microjson(outlines_path)
 
