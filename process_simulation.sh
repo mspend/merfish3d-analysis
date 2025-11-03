@@ -2,6 +2,18 @@
 # Run sim-* pipeline for each subdirectory of a given root.
 # Usage: ./run_sim_pipeline.sh /absolute/or/relative/root/path
 
+
+##### NOTE:
+# Everything has moved to a command line interface. I use a bash script to analyze all of the simulated data in one go, happy to share that if helpful.
+
+# This only does one simulation "type" and you'll need to pass some parameters or edit the script for the --smFISH option
+
+
+
+
+
+
+
 set -Euo pipefail
 
 if [[ $# -ne 1 ]]; then
