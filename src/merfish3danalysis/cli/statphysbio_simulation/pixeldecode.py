@@ -22,6 +22,7 @@ def decode_pixels(
     magnitude_threshold: tuple[float,float]  =[0.9, 10.0],
     fdr_target: float = .05,
     smFISH: bool = False,
+    skip_optimization: bool = False
 ):
     """Perform pixel decoding.
 
@@ -60,15 +61,17 @@ def decode_pixels(
         distance_threshold = 1.0
         decoder._distance_threshold = distance_threshold
 
-    decoder.optimize_normalization_by_decoding(
-        n_random_tiles=1,
-        n_iterations=3,
-        distance_threshold=distance_threshold,
-        magnitude_threshold=magnitude_threshold,
-        minimum_pixels=minimum_pixels_per_RNA,
-        ufish_threshold=ufish_threshold,
-    )
-    
+    if not skip_optimization:
+        # optimize normalization weights through iterative decoding and update
+        decoder.optimize_normalization_by_decoding(
+            n_random_tiles=1,
+            n_iterations=3,
+            distance_threshold=distance_threshold,
+            magnitude_threshold=magnitude_threshold,
+            minimum_pixels=minimum_pixels_per_RNA,
+            ufish_threshold=ufish_threshold,
+        )
+        
     decoder.decode_all_tiles(
         assign_to_cells=False,
         prep_for_baysor=False,
