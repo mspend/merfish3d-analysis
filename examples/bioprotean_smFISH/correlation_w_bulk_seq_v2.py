@@ -9,25 +9,23 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Import bulk RNA-seq data 
+# Read in bulk RNA-seq data 
 bulkseq_path = Path('/data/bulkRNA/IMG/cleanIMGcounts.csv')
+bulkseq_df = pd.read_csv(bulkseq_path, index_col=[0])
 
-bulkseq_df = pd.read_csv(bulkseq_path)
-bulkseq_df = bulkseq_df.rename(columns={'Unnamed: 0':'Gene_Name'})
-
-
-# Only select the relevant columns
+# Select the relevant columns
 # The RNA sequencing data we have had multiple immune stimulants added to IMG cells, but we only want the columns titled 'IMGbas#', base meaning nothing added to these cells.
-bulkseq_df = bulkseq_df.drop(columns=['IMGlpc1', 'IMGlpc2', 'IMGlps1', 'IMGlps2', 'IMGpic1', 'IMGpic2', 'IMGpma1', 'IMGpma2'])
+bulkseq_df = bulkseq_df.drop(columns=['width', 'IMGlpc1', 'IMGlpc2', 'IMGlps1', 'IMGlps2', 'IMGpic1', 'IMGpic2', 'IMGpma1', 'IMGpma2'])
+bulkseq_sorted = bulkseq_df.sort_index()
 
+# Read in smFISH spots from the parquet file of decoded spots
+smfish_path = Path('/data/smFISH/20251028_bartelle_smFISH_mm_microglia_newbuffers/qi2labdatastore/all_tiles_filtered_decoded_features/decoded_features.parquet')
 
-
-# smfish_path = Path('/data/smFISH/20251028_bartelle_smFISH_mm_microglia_newbuffers')
-smfish_decoded_features = Path('/data/smFISH/20251028_bartelle_smFISH_mm_microglia_newbuffers/qi2labdatastore/all_tiles_filtered_decoded_features/decoded_features.parquet')
-# segemented_results = merfish_path / Path('processed_v2') / Path('decoded') / Path('baysor_formatted_genes.csv')
-
-smfish_df = pd.read_parquet(smfish_decoded_features)
+smfish_df = pd.read_parquet(smfish_path)
 print(smfish_df.head)
+
+# Select the relevant columns
+smfish_df = smfish_df.loc[:,['gene_id']]
 
 
 # merfish_counts_df = merfish_df['gene_id'].value_counts().reset_index()
