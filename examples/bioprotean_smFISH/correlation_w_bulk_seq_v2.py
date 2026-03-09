@@ -16,13 +16,13 @@ bulkseq_df = pd.read_csv(bulkseq_path)
 # Select the relevant columns
 bulkseq_counts = bulkseq_df.drop(columns=['Unnamed: 0'])
 bulkseq_counts = bulkseq_counts.rename(columns={'gene_name':'gene_id'})
-# print(bulkseq_counts.head())
+print(bulkseq_counts.head())
 
-# Read in smFISH spots from the parquet file of decoded spots
-smfish_path = Path('/data/smFISH/20251028_bartelle_smFISH_mm_microglia_newbuffers/qi2labdatastore/all_tiles_filtered_decoded_features/decoded_features.parquet')
+# Read in smFISH spots from the csv of spots detected by Big-FISH
+smfish_path = Path('/data/smFISH/20251028_bartelle_smFISH_mm_microglia_newbuffers/qi2labdatastore/big_fish/one_tile_2D/spots.csv')
 
-smfish_df = pd.read_parquet(smfish_path)
-# print(smfish_df.head())
+smfish_df = pd.read_csv(smfish_path)
+print(smfish_df.head())
 
 # Obtain the number of counts per gene
 smfish_counts = smfish_df['gene_id'].value_counts().reset_index()
@@ -40,5 +40,3 @@ plt.xlabel('Log10(TPM from bulk RNA-seq)')
 plt.title('Log-Log Correlation Plot')
 plt.grid(True)
 plt.show()
-
-
