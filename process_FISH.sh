@@ -1,38 +1,41 @@
+#!/usr/bin/env bash
+set -Euo pipefail
+
 # Usage: bash process_FISH.sh /path/to/data
+path_to_data="$1"
 
+# Change this to true if you want to decode
+is_MERFISH=false
 
-path_to_data = $1
+# If no path provided, raise a warning message
+if [[ -z "$path_to_data" ]]; then
+  echo "Please provide the /path/to/data" >&2
+  exit 1
+fi
 
-is_MERFISH = False
-
-
-conda activate merfish3d_052926 
-
-echo "Starting processing: $path_to_data"
-# qi2lab-datastore {path_to_data} --codebook-path /data/smfish/codebook.csv --bit-order-path /data/smfish/bit_order.csv 
-echo "Finished conversion to datastore for $path_to_data"
+echo "Starting conversion: $path_to_data"
+conda run --no-capture-output -n merfish3d_052926  bash -lc \
+    "qi2lab-datastore $path_to_data --codebook-path /data/smfish/codebook.csv --bit-order-path /data/smfish/bit_order.csv" 
+echo "Finished conversion for $path_to_data"
 
 echo "Starting registration"
-# qi2lab-preprocess {path_to_data}
+conda run -n --no-capture-output merfish3d_052926  bash -lc "qi2lab-preprocess $path_to_data"
 echo "Finished registration for $path_to_data"
 
-conda deactivate
-conda activate merfish3d-stitcher 
 
 echo "Starting global registration"
-# qi2lab-globalregister {path_to_data}
+conda run -n --no-capture-output merfish3d_052926 bash -lc "qi2lab-globalregister $path_to_data"
 echo "Finished global registration for $path_to_data"
-
-conda deactivate
-conda activate merfish3d_052926 
+ 
 
 echo "Starting segmentation"
-# qi2lab-segment {path_to_data}
+conda run -n --no-capture-output merfish3d_052926 bash -lc \ "qi2lab-segment $path_to_data"
 
-if is_MERFISH:
+if [[ "$is_MERFISH" == true ]]; then
     echo "Starting decoding"
-    # qi2lab-decode {path_to_data}
+    conda run -n --no-capture-output merfish3d_052926 bash -lc \ "qi2lab-decode $path_to_data"
     echo "Finished decoding for $path_to_data"
+fi
 
 echo "All done."
 
