@@ -26,13 +26,13 @@ run_step() {
   fi
 }
 
-run_step "conversion" conda run --live-stream -n merfish3d_052926 bash -lc "qi2lab-datastore \"$path_to_data\" --codebook-path /data/smfish/codebook.csv --bit-order-path /data/smfish/bit_order.csv"
-run_step "registration" conda run --live-stream -n merfish3d_052926 bash -lc "qi2lab-preprocess \"$path_to_data\""
-run_step "global registration" conda run --live-stream -n merfish3d-stitcher bash -lc "qi2lab-globalregister \"$path_to_data\""
-run_step "segmentation" conda run --live-stream -n merfish3d_052926 bash -lc "qi2lab-segment \"$path_to_data\""
+run_step "conversion" conda run -n merfish3d_052926 --live-stream  bash -lc "qi2lab-datastore  $path_to_data --codebook-path /data/smfish/codebook.csv --bit-order-path /data/smfish/bit_order.csv"
+run_step "registration" conda run -n merfish3d_052926 --live-stream bash -lc "qi2lab-preprocess  $path_to_data"
+run_step "global registration" conda run -n merfish3d-stitcher --live-stream bash -lc "qi2lab-globalregister  $path_to_data"
+run_step "segmentation" conda run -n merfish3d_052926 --live-stream bash -lc "qi2lab-segment  $path_to_data"
 
 if [[ "$is_MERFISH" == true ]]; then
-    run_step "decoding" conda run --live-stream -n merfish3d_052926 bash -lc "qi2lab-decode \"$path_to_data\""
+    run_step "decoding" conda run -n merfish3d_052926 --live-stream bash -lc "qi2lab-decode  $path_to_data"
 fi
 
 echo "All done."
