@@ -89,7 +89,7 @@ def _first_stack_path(
 
 
 @app.command()
-def convert_data(
+def convert_data_skip_z(
     root_path: Path,
     use_illuminations: bool = False,
     save_illuminations: bool = True,
@@ -98,6 +98,7 @@ def convert_data(
     output_path: Path | None = None,
     codebook_path: Path | None = None,
     bit_order_path: Path | None = None,
+    z_step: int = 1,
 ) -> None:
     """Convert qi2lab microscope data to qi2lab datastore.
 
@@ -123,6 +124,8 @@ def convert_data(
         path to bit order file. This file defines what bits are present in each
         imaging round, in channel order. Default of `None` assumes
         the file is in the root_path.
+    z_step: int, default = 1
+        z stride to use when creating datastore. 1 = all data, 2 = every other plane, etc...
     """
 
     # load illuminations if requested
@@ -135,10 +138,12 @@ def convert_data(
         else:
             use_illuminations = False
 
-    # load codebook
-    # --------------
     if channel_names is None:
         channel_names = ["alexa488", "atto565", "alexa647"]
+    z_start = 0
+
+    # load codebook
+    # --------------
     if codebook_path is None:
         codebook = pd.read_csv(root_path / Path("codebook.csv"))
     else:
@@ -165,28 +170,25 @@ def convert_data(
     from ndstorage import Dataset
 
     # load first tile to get experimental metadata
-    dataset_path_1 = root_path / Path(
-        f"{root_name}_r{str(1).zfill(4)}_tile{str(0).zfill(4)}_1"
+    dataset_path = root_path / Path(
+        root_name + "_r" + str(1).zfill(4) + "_tile" + str(0).zfill(4) + "_1"
     )
-    dataset_path_2 = root_path / Path(
-        f"{root_name}_r{str(1).zfill(4)}_tile{str(0).zfill(4)}_2"
-    )
-
-    if dataset_path_1.exists():
-        dataset_path = dataset_path_1
-    elif dataset_path_2.exists():
-        dataset_path = dataset_path_2
-    else:
-        raise FileNotFoundError(
-            f"Dataset path not found:\n- {dataset_path_1}\n- {dataset_path_2}"
-        )
-
     original_print = builtins.print
     builtins.print = no_op
-    try:
-        dataset = Dataset(str(dataset_path))
-    finally:
-        builtins.print = original_print
+    dataset_path1 = dataset_path
+    dataset_path2 = root_path / Path(
+        root_name + "_r" + str(1).zfill(4) + "_tile" + str(0).zfill(4) + "_2"
+    )
+
+    if dataset_path1.exists():
+        dataset = Dataset(str(dataset_path1))
+    elif dataset_path2.exists():
+        dataset = Dataset(str(dataset_path2))
+    else:
+        raise FileNotFoundError(
+            f"Dataset path not found:\n- {dataset_path1}\n- {dataset_path2}"
+        )
+    builtins.print = original_print
     channel_to_test = dataset.get_image_coordinates_list()[0]["channel"]
     ndtiff_metadata = dataset.read_metadata(channel=channel_to_test, z=0)
     try:
@@ -246,9 +248,9 @@ def convert_data(
     # in the imaging data itself. We added it to > v8 qi2lab-scope metadata csv to make the
     # access pattern easier.
     try:
-        z_pixel_um = float(metadata["z_step_um"])
+        dz_eff = float(metadata["z_step_um"]) * z_step
         yx_pixel_um = float(metadata["yx_pixel_um"])
-        voxel_size_zyx_um = [z_pixel_um, yx_pixel_um, yx_pixel_um]
+        voxel_size_zyx_um = [dz_eff, yx_pixel_um, yx_pixel_um]
     except Exception:
         yx_pixel_um = np.round(float(ndtiff_metadata["PixelSizeUm"]), 3)
         next_ndtiff_metadata = dataset.read_metadata(channel=channel_to_test, z=1)
@@ -259,7 +261,8 @@ def convert_data(
             ),
             3,
         )
-        voxel_size_zyx_um = [z_pixel_um, yx_pixel_um, yx_pixel_um]
+        dz_eff = z_pixel_um * z_step
+        voxel_size_zyx_um = [dz_eff, yx_pixel_um, yx_pixel_um]
 
         del next_ndtiff_metadata
 
@@ -326,7 +329,8 @@ def convert_data(
     raw_image = imread(_first_stack_path(root_path, root_name, 0, 0))
     if camera == "orcav3":
         raw_image = np.swapaxes(raw_image, 0, 1)
-    psf_z = int(raw_image.shape[1]) if raw_image.ndim == 4 else 1
+    z_full = int(raw_image.shape[1]) if raw_image.ndim == 4 else 1
+    psf_z = len(range(z_start, z_full, z_step))
     del raw_image
 
     channel_psfs = []
@@ -348,7 +352,9 @@ def convert_data(
 
     # initialize datastore
     if output_path is None:
-        datastore_path = root_path / Path(r"qi2labdatastore")
+        datastore_path = root_path / Path(
+            r"qi2labdatastore_zstride" + str(z_step).zfill(2)
+        )
         if datastore_path.exists():
             existing_store = True
         else:
@@ -370,13 +376,11 @@ def convert_data(
         datastore.codebook = codebook
         datastore.experiment_order = experiment_order
         datastore.num_tiles = num_tiles
-        try:
-            datastore.microscope_type = metadata["experiment_type"]
-        except Exception:
-            if z_pixel_um < 0.5:
-                datastore.microscope_type = "3D"
-            else:
-                datastore.microscope_type = "2D"
+
+        if dz_eff < 0.5:
+            datastore.microscope_type = "3D"
+        else:
+            datastore.microscope_type = "2D"
         datastore.camera_model = camera
         try:
             datastore.tile_overlap = metadata["tile_overlap"]
@@ -432,7 +436,7 @@ def convert_data(
                 )
                 z_pos_um = np.round(
                     float(
-                        dataset.read_metadata(channel=channel_to_test, z=0)[
+                        dataset.read_metadata(channel=channel_to_test, z=z_start)[
                             "ZPosition_um_Intended"
                         ]
                     ),
@@ -449,28 +453,58 @@ def convert_data(
                 if round_idx == 0:
                     datastore.initialize_tile(tile_idx)
 
-                # Build both candidate paths
-                base = f"{root_name}_r{str(round_idx + 1).zfill(4)}_tile{str(tile_idx).zfill(4)}"
-
-                image_path_1 = (
-                    root_path / Path(f"{base}_1") / Path(f"{base}_NDTiffStack.tif")
+                # load raw image
+                image_path = (
+                    root_path
+                    / Path(
+                        root_name
+                        + "_r"
+                        + str(round_idx + 1).zfill(4)
+                        + "_tile"
+                        + str(tile_idx).zfill(4)
+                        + "_1"
+                    )
+                    / Path(
+                        root_name
+                        + "_r"
+                        + str(round_idx + 1).zfill(4)
+                        + "_tile"
+                        + str(tile_idx).zfill(4)
+                        + "_NDTiffStack.tif"
+                    )
                 )
-                image_path_2 = (
-                    root_path / Path(f"{base}_2") / Path(f"{base}_NDTiffStack.tif")
+
+                # load raw data and make sure it is the right shape. If not, write
+                # zeros for this round/stage position.
+                image_path1 = image_path  # your original
+                image_path2 = (
+                    root_path
+                    / Path(
+                        root_name
+                        + "_r"
+                        + str(round_idx + 1).zfill(4)
+                        + "_tile"
+                        + str(tile_idx).zfill(4)
+                        + "_2"
+                    )
+                    / Path(
+                        root_name
+                        + "_r"
+                        + str(round_idx + 1).zfill(4)
+                        + "_tile"
+                        + str(tile_idx).zfill(4)
+                        + "_NDTiffStack.tif"
+                    )
                 )
 
-                # Choose the first that exists
-                if image_path_1.exists():
-                    image_path = image_path_1
-                elif image_path_2.exists():
-                    image_path = image_path_2
+                if image_path1.exists():
+                    raw_image = imread(image_path1)
+                elif image_path2.exists():
+                    raw_image = imread(image_path2)
                 else:
                     raise FileNotFoundError(
-                        f"Could not find raw image at either path:\n- {image_path_1}\n- {image_path_2}"
+                        f"Could not find image at either path:\n- {image_path1}\n- {image_path2}"
                     )
-
-                # Load raw data (if this fails now, it's a real read/corruption issue)
-                raw_image = imread(image_path)
                 if camera == "orcav3":
                     raw_image = np.swapaxes(raw_image, 0, 1)
                     if tile_idx == 0 and round_idx == 0:
@@ -514,6 +548,11 @@ def convert_data(
                 else:
                     hot_pixel_corrected = False
 
+                # --- z subsampling / offset ---
+                Z_full = raw_image.shape[
+                    1
+                ]  # assumes raw_image is (C, Z, Y, X) after swapaxes
+
                 # load stage position
                 if int(ndtiff_metadata["XYStage-TransposeMirrorX"]) == 1:
                     corrected_y = (
@@ -541,21 +580,23 @@ def convert_data(
                     [stage_z, corrected_y, corrected_x], dtype=np.float32
                 )
 
-                # write fidicual data (ch_idx = 0) and metadata
                 if use_illuminations:
                     data_camera_corrected = (
                         (
-                            np.squeeze(raw_image[0, :]).astype(np.float32)
+                            np.squeeze(raw_image[0, z_start:Z_full:z_step, :]).astype(
+                                np.float32
+                            )
                             / illuminations[0, :]
                         )
                         .clip(0, 2**16 - 1)
                         .astype(np.uint16)
                     )
                 else:
-                    data_camera_corrected = np.squeeze(raw_image[0, :]).astype(
-                        np.uint16
-                    )
+                    data_camera_corrected = np.squeeze(
+                        raw_image[0, z_start:Z_full:z_step, :]
+                    ).astype(np.uint16)
 
+                # write fidicual data (ch_idx = 0) and metadata
                 datastore.save_local_corrected_image(
                     data_camera_corrected,
                     tile=tile_idx,
@@ -579,16 +620,18 @@ def convert_data(
                 if use_illuminations:
                     data_camera_corrected = (
                         (
-                            np.squeeze(raw_image[1, :]).astype(np.float32)
+                            np.squeeze(raw_image[1, z_start:Z_full:z_step, :]).astype(
+                                np.float32
+                            )
                             / illuminations[1, :]
                         )
                         .clip(0, 2**16 - 1)
                         .astype(np.uint16)
                     )
                 else:
-                    data_camera_corrected = np.squeeze(raw_image[1, :]).astype(
-                        np.uint16
-                    )
+                    data_camera_corrected = np.squeeze(
+                        raw_image[1, z_start:Z_full:z_step, :]
+                    ).astype(np.uint16)
 
                 # write first readout channel (ch_idx = 1) and metadata
                 datastore.save_local_corrected_image(
@@ -609,16 +652,18 @@ def convert_data(
                 if use_illuminations:
                     data_camera_corrected = (
                         (
-                            np.squeeze(raw_image[2, :]).astype(np.float32)
+                            np.squeeze(raw_image[2, z_start:Z_full:z_step, :]).astype(
+                                np.float32
+                            )
                             / illuminations[2, :]
                         )
                         .clip(0, 2**16 - 1)
                         .astype(np.uint16)
                     )
                 else:
-                    data_camera_corrected = np.squeeze(raw_image[2, :]).astype(
-                        np.uint16
-                    )
+                    data_camera_corrected = np.squeeze(
+                        raw_image[2, z_start:Z_full:z_step, :]
+                    ).astype(np.uint16)
 
                 # write second readout channel (ch_idx = 2) and metadata
                 datastore.save_local_corrected_image(
@@ -642,7 +687,7 @@ def convert_data(
 
     # Calculate and apply flatfield corrections
     if not (use_illuminations):
-        # reload datastore
+        # reload datstore
         del datastore
         datastore = qi2labDataStore(datastore_path)
 
@@ -665,40 +710,6 @@ def convert_data(
                     round=0,
                 )
             )
-        fidicual_illumination = estimate_shading(data_camera_corrected)
-        del data_camera_corrected
-        gc.collect()
-
-        if save_illuminations:
-            illuminations = np.zeros(
-                (3, fidicual_illumination.shape[0], fidicual_illumination.shape[1]),
-                dtype=np.float32,
-            )
-            illuminations[0, :] = fidicual_illumination
-            readout_illumination_psf1 = []
-            readout_illumination_psf2 = []
-
-        for round_idx in tqdm(range(datastore.num_rounds), desc="rounds"):
-            for tile_idx in tqdm(range(datastore.num_tiles), desc="tile", leave=False):
-                data_camera_corrected = datastore.load_local_corrected_image(
-                    tile=tile_idx, round=round_idx, return_future=False
-                )
-                data_camera_corrected = (
-                    (data_camera_corrected.astype(np.float32) / fidicual_illumination)
-                    .clip(0, 2**16 - 1)
-                    .astype(np.uint16)
-                )
-                datastore.save_local_corrected_image(
-                    data_camera_corrected,
-                    tile=tile_idx,
-                    psf_idx=0,
-                    gain_correction=True,
-                    hotpixel_correction=False,
-                    shading_correction=True,
-                    round=round_idx,
-                )
-
-        for bit_id in tqdm(datastore.bit_ids, desc="bit", leave=True):
             data_camera_corrected = []
 
             # calculate fiducial correction
@@ -708,99 +719,154 @@ def convert_data(
                 data_camera_corrected.append(
                     datastore.load_local_corrected_image(
                         tile=int(rand_tile_idx),
-                        bit=bit_id,
+                        round=0,
                     )
                 )
-            readout_illumimation = estimate_shading(data_camera_corrected)
-            del data_camera_corrected
-
-            ex_wavelength_um, _em_wavelength_um = datastore.load_local_wavelengths_um(
-                tile=0, bit=bit_id
-            )
-
-            # Readout wavelengths are stored in micrometers.
-            if ex_wavelength_um < 0.600:
-                readout_illumination_psf1.append(readout_illumimation.copy())
-            else:
-                readout_illumination_psf2.append(readout_illumimation.copy())
-            del readout_illumimation
-            gc.collect()
-
-        illuminations[1, :] = np.median(
-            np.stack(readout_illumination_psf1, axis=0), axis=0
-        ).astype(np.float32)
-        illuminations[2, :] = np.median(
-            np.stack(readout_illumination_psf2, axis=0), axis=0
-        ).astype(np.float32)
-
-        del readout_illumination_psf1, readout_illumination_psf2
-        gc.collect()
-
-        for tile_idx in tqdm(range(datastore.num_tiles), desc="tile", leave=False):
-            data_camera_corrected = datastore.load_local_corrected_image(
-                tile=tile_idx, bit=bit_id, return_future=False
-            )
-
-            ex_wavelength_um, _em_wavelength_um = datastore.load_local_wavelengths_um(
-                tile=tile_idx, bit=bit_id
-            )
-
-            # Readout wavelengths are stored in micrometers.
-            if ex_wavelength_um < 0.600:
-                psf_idx = 1
-            else:
-                psf_idx = 2
-
-            data_camera_corrected = (
-                (data_camera_corrected.astype(np.float32) / illuminations[psf_idx, :])
-                .clip(0, 2**16 - 1)
-                .astype(np.uint16)
-            )
-
-            datastore.save_local_corrected_image(
-                data_camera_corrected.astype(np.uint16),
-                tile=tile_idx,
-                psf_idx=psf_idx,
-                gain_correction=True,
-                hotpixel_correction=False,
-                shading_correction=True,
-                bit=bit_id,
-            )
-
+            fidicual_illumination = estimate_shading(data_camera_corrected)
             del data_camera_corrected
             gc.collect()
 
-        if save_illuminations:
-            from tifffile import TiffWriter
-
-            filename = "illuminations.ome.tif"
-            illuminations_path = root_path / Path(filename)
-
-            with TiffWriter(illuminations_path, bigtiff=True) as tif:
-                metadata = {
-                    "axes": "CYX",
-                    "SignificantBits": 32,
-                    "PhysicalSizeX": float(datastore.voxel_size_zyx_um[2]),
-                    "PhysicalSizeXUnit": "µm",
-                    "PhysicalSizeY": float(datastore.voxel_size_zyx_um[1]),
-                    "PhysicalSizeYUnit": "µm",
-                }
-                options = {
-                    "compression": "zlib",
-                    "compressionargs": {"level": 8},
-                    "predictor": True,
-                    "photometric": "minisblack",
-                    "resolutionunit": "CENTIMETER",
-                }
-                tif.write(
-                    illuminations,
-                    resolution=(
-                        1e4 / float(datastore.voxel_size_zyx_um[2]),
-                        1e4 / float(datastore.voxel_size_zyx_um[1]),
-                    ),
-                    **options,
-                    metadata=metadata,
+            if save_illuminations:
+                illuminations = np.zeros(
+                    (3, fidicual_illumination.shape[0], fidicual_illumination.shape[1]),
+                    dtype=np.float32,
                 )
+                illuminations[0, :] = fidicual_illumination
+                readout_illumination_psf1 = []
+                readout_illumination_psf2 = []
+
+            for round_idx in tqdm(range(datastore.num_rounds), desc="rounds"):
+                for tile_idx in tqdm(
+                    range(datastore.num_tiles), desc="tile", leave=False
+                ):
+                    data_camera_corrected = datastore.load_local_corrected_image(
+                        tile=tile_idx, round=round_idx, return_future=False
+                    )
+                    data_camera_corrected = (
+                        (
+                            data_camera_corrected.astype(np.float32)
+                            / fidicual_illumination
+                        )
+                        .clip(0, 2**16 - 1)
+                        .astype(np.uint16)
+                    )
+                    datastore.save_local_corrected_image(
+                        data_camera_corrected,
+                        tile=tile_idx,
+                        psf_idx=0,
+                        gain_correction=True,
+                        hotpixel_correction=False,
+                        shading_correction=True,
+                        round=round_idx,
+                    )
+
+            for bit_id in tqdm(datastore.bit_ids, desc="bit", leave=True):
+                data_camera_corrected = []
+
+                # calculate fiducial correction
+                for rand_tile_idx in tqdm(
+                    sample_indices, desc="flatfield data", leave=False
+                ):
+                    data_camera_corrected.append(
+                        datastore.load_local_corrected_image(
+                            tile=int(rand_tile_idx),
+                            bit=bit_id,
+                        )
+                    )
+                readout_illumimation = estimate_shading(data_camera_corrected)
+                del data_camera_corrected
+                gc.collect()
+                for tile_idx in tqdm(
+                    range(datastore.num_tiles), desc="tile", leave=False
+                ):
+                    data_camera_corrected = datastore.load_local_corrected_image(
+                        tile=tile_idx, bit=bit_id, return_future=False
+                    )
+                    data_camera_corrected = (
+                        (
+                            data_camera_corrected.astype(np.float32)
+                            / readout_illumimation
+                        )
+                        .clip(0, 2**16 - 1)
+                        .astype(np.uint16)
+                    )
+
+                    ex_wavelength_um, _em_wavelength_um = (
+                        datastore.load_local_wavelengths_um(tile=tile_idx, bit=bit_id)
+                    )
+
+                    # Readout wavelengths are stored in micrometers.
+                    if ex_wavelength_um < 0.600:
+                        psf_idx = 1
+                    else:
+                        psf_idx = 2
+
+                    datastore.save_local_corrected_image(
+                        data_camera_corrected.astype(np.uint16),
+                        tile=tile_idx,
+                        psf_idx=psf_idx,
+                        gain_correction=True,
+                        hotpixel_correction=False,
+                        shading_correction=True,
+                        bit=bit_id,
+                    )
+
+                    if save_illuminations:
+                        # One profile per bit; accumulate once using the first tile's channel.
+                        if tile_idx == 0:
+                            if psf_idx == 1:
+                                readout_illumination_psf1.append(
+                                    readout_illumimation.copy()
+                                )
+                            else:
+                                readout_illumination_psf2.append(
+                                    readout_illumimation.copy()
+                                )
+
+            if save_illuminations:
+                from tifffile import TiffWriter
+
+                if readout_illumination_psf1:
+                    illuminations[1, :, :] = np.median(
+                        np.stack(readout_illumination_psf1, axis=0), axis=0
+                    ).astype(np.float32)
+                if readout_illumination_psf2:
+                    illuminations[2, :, :] = np.median(
+                        np.stack(readout_illumination_psf2, axis=0), axis=0
+                    ).astype(np.float32)
+
+                filename = "illuminations.ome.tif"
+                illuminations_path = root_path / Path(filename)
+
+                with TiffWriter(illuminations_path, bigtiff=True) as tif:
+                    metadata = {
+                        "axes": "CYX",
+                        "SignificantBits": 32,
+                        "PhysicalSizeX": float(datastore.voxel_size_zyx_um[2]),
+                        "PhysicalSizeXUnit": "µm",
+                        "PhysicalSizeY": float(datastore.voxel_size_zyx_um[1]),
+                        "PhysicalSizeYUnit": "µm",
+                    }
+                    options = {
+                        "compression": "zlib",
+                        "compressionargs": {"level": 8},
+                        "predictor": True,
+                        "photometric": "minisblack",
+                        "resolutionunit": "CENTIMETER",
+                    }
+                    tif.write(
+                        illuminations,
+                        resolution=(
+                            1e4 / float(datastore.voxel_size_zyx_um[2]),
+                            1e4 / float(datastore.voxel_size_zyx_um[1]),
+                        ),
+                        **options,
+                        metadata=metadata,
+                    )
+
+    datastore_state = datastore.datastore_state
+    datastore_state.update({"Corrected": True})
+    datastore.datastore_state = datastore_state
 
 
 def main() -> None:

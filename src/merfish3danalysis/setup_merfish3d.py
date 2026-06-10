@@ -1,10 +1,11 @@
 import os
+import platform
 import shlex
+import shutil
 import stat
 import subprocess
-import shutil
-import platform
 from pathlib import Path
+
 import typer
 
 app = typer.Typer()
@@ -14,16 +15,18 @@ app.pretty_exceptions_enable = False
 BASE_PIP_DEPS = [
     "tqdm",
     "ryomen",
-    "tensorstore",
     "nvidia-cuda-runtime-cu12==12.8.*",
+    "cuda-bindings==12.8.*",
     "onnx",
     "onnxruntime-gpu",
     "napari[pyqt6]",
+    "ndv[vispy,pyqt]",
+    "qtpy",
     "cellpose[gui]",
     "ufish @ git+https://github.com/QI2lab/U-FISH.git@main",
     "warpfield @ git+https://github.com/QI2lab/warpfield.git@qi2lab-working",
     "basicpy @ git+https://github.com/QI2lab/BaSiCPy.git@main",
-    "tifffile",
+    "tifffile==2025.9.20",  # pin to avoid numpy 2 usage when loading ndtiff
     "numcodecs",
     "cmap",
     "psfmodels",
@@ -32,13 +35,16 @@ BASE_PIP_DEPS = [
     "roifile",
     "imbalanced-learn",
     "scikit-learn",
-    "anndata",
+    "yaozarrs[write-tensorstore,io]>=0.3",
+    "matplotlib",
+    "xarray",
 ]
 
 # CUDA conda pkgs (Linux)
 LINUX_CONDA_CUDA_PKGS = [
     "'cuda-version=12.8'",
     "'cuda-toolkit=12.8'",
+    "'cuda-bindings=12.8.*'",
     "cuda-cudart",
     "cuda-nvrtc",
     "cucim",
@@ -49,15 +55,13 @@ LINUX_CONDA_CUDA_PKGS = [
     "cutensor",
     "nccl",
     "pyopengl",
-    "pyimagej",
-    "openjdk=11",
     "'numpy=1.26.4'",
-    "scipy",
+    "'scipy=1.12.0'",
     "shapely",
     "rtree",
     "numba",
-    "zarr>3.0.8",
-    "pandas",
+    "'zarr>3.0.8'",
+    "'pandas=2.3.3'",
     "fastparquet",
     "tbb",
 ]
@@ -77,10 +81,27 @@ MVSTITCHER_ENV_PIP_IMPORTS = [
     "roifile",
     "shapely",
     "fastparquet",
+    "joblib",
+    "yaozarrs[write-tensorstore,io]>=0.3",
 ]
 
 
-def run(command: str, *, cwd: Path | None = None):
+def run(command: str, *, cwd: Path | None = None) -> None:
+    """
+    Run.
+
+    Parameters
+    ----------
+    command : str
+        Function argument.
+    cwd : Path | None
+        Function argument.
+
+    Returns
+    -------
+    None
+        Function result.
+    """
     typer.echo(f"$ {command}")
     subprocess.run(command, shell=True, check=True, cwd=str(cwd) if cwd else None)
 
@@ -104,7 +125,9 @@ def _find_installer() -> str:
         exe = shutil.which(override)
         if exe:
             return exe
-        raise RuntimeError(f"MERFISH3D_INSTALLER={override!r} not found on disk or PATH")
+        raise RuntimeError(
+            f"MERFISH3D_INSTALLER={override!r} not found on disk or PATH"
+        )
 
     # 2) Prefer Conda if available
     conda_exe = os.environ.get("CONDA_EXE")
@@ -145,18 +168,18 @@ def _find_installer() -> str:
 
 
 @app.command()
-def setup_cuda(    
+def setup_cuda(
     headless: bool = typer.Option(
         False,
         "--headless",
         help="Skip GUI dependencies such as napari[pyqt6] and cellpose[gui].",
-    )
-):
+    ),
+) -> None:
     """
     Linux-only setup:
 
     1) Install CUDA packages via conda/mamba (rapidsai + conda-forge + nvidia).
-    2) Write activation hooks exporting CUDA_PATH and JAVA_HOME for this env.
+    2) Write activation hooks exporting CUDA_PATH for this env.
     3) (Optional) Prep CURRENT env: torch/vision cu128, BASE_PIP_DEPS, jax local CUDA.
     4) Create NEW env 'merfish3d-stitcher' (Python 3.12) and pip-install useful deps.
     """
@@ -174,17 +197,15 @@ def setup_cuda(
         typer.echo(f"Using installer: {installer}")
     except RuntimeError as e:
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(code=1) from None
 
     # 1) Core CUDA + OpenJDK stack from conda
     channels = "-c rapidsai -c conda-forge -c nvidia"
     run(f"{installer} install -y {channels} {' '.join(LINUX_CONDA_CUDA_PKGS)}")
 
-    # 2) Activation / deactivation hooks
+    # 2) Activation hooks
     activate_dir = Path(prefix) / "etc" / "conda" / "activate.d"
-    deactivate_dir = Path(prefix) / "etc" / "conda" / "deactivate.d"
     activate_dir.mkdir(parents=True, exist_ok=True)
-    deactivate_dir.mkdir(parents=True, exist_ok=True)
 
     # CUDA hook (kept; no longer deletes other hooks)
     sh_cuda = activate_dir / "cuda_override.sh"
@@ -208,45 +229,15 @@ export CCCL_IGNORE_DEPRECATED_CPP_DIALECT="1"
     )
     sh_cuda.chmod(sh_cuda.stat().st_mode | stat.S_IEXEC)
 
-    # NEW: Java hook — ensure JPype/pyimagej can see libjvm.so
-    sh_java = activate_dir / "java_openjdk.sh"
-    sh_java.write_text(
-        """#!/usr/bin/env sh
-# Point JAVA_HOME at the env's OpenJDK so JPype/scyjava can find libjvm.so
-export JAVA_HOME="${CONDA_PREFIX}"
-export PATH="$JAVA_HOME/bin:$PATH"
-
-# Helpful for debugging: remember the resolved libjvm path
-if [ -f "$JAVA_HOME/lib/server/libjvm.so" ]; then
-  export _CONDA_JAVA_LIBJVM="$JAVA_HOME/lib/server/libjvm.so"
-else
-  # Fallback for nonstandard layouts
-  _ALT_JVM="$(command -v find >/dev/null 2>&1 && find "$JAVA_HOME" -type f -name libjvm.so 2>/dev/null | head -n1)"
-  [ -n "$_ALT_JVM" ] && export _CONDA_JAVA_LIBJVM="$_ALT_JVM"
-fi
-""",
-        encoding="utf-8",
-    )
-    sh_java.chmod(sh_java.stat().st_mode | stat.S_IEXEC)
-
-    # Deactivation: clean up JAVA_HOME (leave PATH/LD_LIBRARY_PATH alone to avoid tricky string surgery)
-    sh_java_deact = deactivate_dir / "java_openjdk.sh"
-    sh_java_deact.write_text(
-        """#!/usr/bin/env sh
-unset JAVA_HOME
-unset _CONDA_JAVA_LIBJVM
-""",
-        encoding="utf-8",
-    )
-    sh_java_deact.chmod(sh_java_deact.stat().st_mode | stat.S_IEXEC)
-
     # 3) (Optional) Prep CURRENT env
-    run("python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128")
+    run(
+        "python -m pip install --upgrade-strategy only-if-needed torch torchvision cuda-bindings==12.8.* --index-url https://download.pytorch.org/whl/cu128"
+    )
     if headless:
         pip_deps = [
             d
             for d in BASE_PIP_DEPS
-            if not d.startswith("napari[") and not d.startswith("cellpose[")
+            if not d.startswith(("napari[", "cellpose[", "ndv[")) and d != "qtpy"
         ]
     else:
         pip_deps = BASE_PIP_DEPS
@@ -254,11 +245,15 @@ unset _CONDA_JAVA_LIBJVM
     run(f"python -m pip install {' '.join(shlex.quote(d) for d in LINUX_JAX_LIB)}")
 
     # 4) Create NEW env and install what you asked
-    run(f"{installer} create -y -n {MVSTITCHER_ENV_NAME} python={MVSTITCHER_ENV_PY} pip")
+    run(
+        f"{installer} create -y -n {MVSTITCHER_ENV_NAME} python={MVSTITCHER_ENV_PY} pip"
+    )
     repo_dir = Path.cwd()
 
     # Upgrade build tooling, then install the *imports* deps first
-    run(f"{installer} run -n {MVSTITCHER_ENV_NAME} python -m pip install -U pip setuptools wheel")
+    run(
+        f"{installer} run -n {MVSTITCHER_ENV_NAME} python -m pip install -U pip setuptools wheel"
+    )
 
     # Install multiview-stitcher and minimal deps to use merfish3d-analysis datastore class
     run(
@@ -270,12 +265,23 @@ unset _CONDA_JAVA_LIBJVM
         f"{installer} run -n {MVSTITCHER_ENV_NAME} python -m pip install "
         + " ".join(shlex.quote(d) for d in MVSTITCHER_ENV_PIP_IMPORTS)
     )
-    run(f"{installer} run -n {MVSTITCHER_ENV_NAME} python -m pip install -e .", cwd=repo_dir)
+    run(
+        f"{installer} run -n {MVSTITCHER_ENV_NAME} python -m pip install -e .",
+        cwd=repo_dir,
+    )
 
     typer.echo("\nSetup complete.\n")
 
 
-def main():
+def main() -> None:
+    """
+    Main.
+
+    Returns
+    -------
+    None
+        Function result.
+    """
     app()
 
 
