@@ -87,6 +87,21 @@ def _first_stack_path(
         f"Could not find raw image at either path:\n- {image_path_1}\n- {image_path_2}"
     )
 
+def check_shape_across_rounds(
+        
+):
+    """
+    Lazy load the tiles, check the shape of every round.
+    If the shape differs across rounds, keep the largest z size found and list the rounds that need padding.
+    """
+    
+
+def pad_z(
+        
+):
+    """
+    Pad the data on the z axis using camera offset
+    """
 
 @app.command()
 def convert_data(
