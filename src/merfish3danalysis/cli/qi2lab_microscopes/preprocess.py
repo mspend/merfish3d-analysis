@@ -71,7 +71,7 @@ def local_register_data(
         datastore_path = root_path / Path(r"qi2labdatastore")
     else:
         datastore_path = root_path / Path(f"qi2labdatastore_zstride0{zstride_level}")
-    datastore = qi2labDataStore(datastore_path)
+    datastore = qi2labDataStore(datastore_path, validate=False)
     print(f"Using datastore at {datastore_path}")
 
     # initialize registration class

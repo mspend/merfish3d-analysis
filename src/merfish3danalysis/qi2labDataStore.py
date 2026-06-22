@@ -597,6 +597,36 @@ class qi2labDataStore:
         """
 
         psfs = getattr(self, "_psfs", None)
+        if psfs is None and getattr(self, "_datastore_state", None):
+            try:
+                psf_root_path = self._calibrations_zarr_path / Path("psf_data")
+                if psf_root_path.exists():
+                    psf_dirs = sorted(
+                        [
+                            entry
+                            for entry in psf_root_path.iterdir()
+                            if entry.is_dir()
+                            and re.fullmatch(r"psf_\d{3}\.ome\.zarr", entry.name)
+                        ],
+                        key=lambda p: int(p.name[len("psf_") : len("psf_") + 3]),
+                    )
+                else:
+                    psf_dirs = []
+
+                if len(psf_dirs) > 0:
+                    psf_list = []
+                    for psf_dir in psf_dirs:
+                        psf_array = self._load_from_zarr_array(
+                            kvstore=self._get_kvstore_key(psf_dir),
+                            spec=self._zarrv2_spec.copy(),
+                            return_future=False,
+                        )
+                        psf_list.append(np.asarray(psf_array, dtype=np.float32))
+                    self._psfs = psf_list
+                    psfs = self._psfs
+            except (OSError, ZarrError, ValueError, AttributeError):
+                return None
+
         if psfs is None:
             return None
         if isinstance(psfs, list):
