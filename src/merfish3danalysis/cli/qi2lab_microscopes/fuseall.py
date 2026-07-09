@@ -16,7 +16,7 @@ import dask
 import dask.array as da
 import dask.diagnostics
 import numpy as np
-from multiview_stitcher import fusion, msi_utils, ngff_utils, registration
+from multiview_stitcher import fusion, misc_utils, msi_utils, ngff_utils, registration
 from multiview_stitcher import spatial_image_utils as si_utils
 from tqdm import tqdm
 
@@ -25,7 +25,13 @@ from merfish3danalysis.qi2labDataStore import qi2labDataStore
 mp.set_start_method("spawn", force=True)
 
 
-def fuse_all_channels(root_path: Path) -> None:
+def fuse_all_channels(
+    root_path: Path,
+    fused_chunk_size: int = 512,
+    n_jobs: int = 8,
+    use_gpu_fusion: bool = True,
+    ngff_version: str = "0.5",
+) -> None:
     """Register all channels across all tiles.
 
     Registration is performed using the fiducial channel.
@@ -34,6 +40,14 @@ def fuse_all_channels(root_path: Path) -> None:
     ----------
     root_path: Path
         path to experiment
+    fused_chunk_size : int, default=512
+        Fused OME-Zarr chunk size.
+    n_jobs : int, default=8
+        Number of chunk fusion jobs to process per batch.
+    use_gpu_fusion : bool, default=True
+        Use multiview-stitcher's CuPy backend for per-chunk fusion.
+    ngff_version : str, default="0.5"
+        OME-NGFF version requested for direct multiview-stitcher Zarr output.
     """
 
     # initialize datastore
@@ -43,12 +57,21 @@ def fuse_all_channels(root_path: Path) -> None:
     gene_ids = list(datastore.codebook["gene_id"])
     channel_ids = ["fiducial", *gene_ids]
 
-    im_data = datastore.load_local_registered_image(
-        tile=0, round=0, return_future=False
+    first_fiducial_path = (
+        datastore_path
+        / Path("fiducial")
+        / Path(datastore.tile_ids[0])
+        / Path(datastore.round_ids[0])
+        / Path("registered_decon_data.ome.zarr")
     )
-
-    im_shape = im_data.shape
-    del im_data
+    first_fiducial_sim = ngff_utils.read_sim_from_ome_zarr(
+        first_fiducial_path,
+        resolution_level=0,
+        transform_key="stage_metadata",
+        use_dask=False,
+    )
+    im_shape = tuple(int(first_fiducial_sim.sizes[dim]) for dim in ("z", "y", "x"))
+    del first_fiducial_sim
 
     # convert local tiles from first round to multiscale spatial images
     print("\nLazy loading fiducial channel...")
@@ -73,9 +96,6 @@ def fuse_all_channels(root_path: Path) -> None:
             "x": np.round(tile_position_zyx_um[2], 2),
         }
 
-        # create empty array to hold all channels for this tile
-        im_data = da.zeros((1, im_shape[0], im_shape[1], im_shape[2]), dtype=np.uint16)
-
         input_path = (
             datastore_path
             / Path("fiducial")
@@ -83,22 +103,33 @@ def fuse_all_channels(root_path: Path) -> None:
             / Path("round001")
             / Path("registered_decon_data.ome.zarr")
         )
-        im_data[0, :] = da.from_zarr(str(input_path)).astype(np.uint16)
+        sim_on_disk = ngff_utils.read_sim_from_ome_zarr(
+            input_path,
+            resolution_level=0,
+            transform_key="stage_metadata",
+            use_dask=False,
+        )
 
         # create spatial image for all channels in current tile
         sim = si_utils.get_sim_from_array(
-            im_data,
-            dims=("c", "z", "y", "x"),
+            sim_on_disk.data,
+            dims=sim_on_disk.dims,
             scale=scale,
             translation=tile_grid_positions,
             affine=affine_zyx_px,
             transform_key="stage_metadata",
+            c_coords=(
+                sim_on_disk.coords["c"].values if "c" in sim_on_disk.coords else None
+            ),
+            t_coords=(
+                sim_on_disk.coords["t"].values if "t" in sim_on_disk.coords else None
+            ),
         )
 
         # convert to multiscale spatial image object and append to list for registration
         msim = msi_utils.get_msim_from_sim(sim, scale_factors=[])
         msims.append(msim)
-        del im_data
+        del sim_on_disk
         gc.collect()
 
     # perform registration
@@ -120,7 +151,7 @@ def fuse_all_channels(root_path: Path) -> None:
     for ch_idx in tqdm(range(len(channel_ids)), desc="channel"):
         msims_full = []
         for tile_idx, msim in enumerate(tqdm(msims, desc="tile")):
-            # parse the registered fidicual channel to get the registration metadata
+            # parse the registered fiducial channel to get the registration metadata
             affine = msi_utils.get_transform_from_msim(
                 msim, transform_key="affine_registered"
             ).data.squeeze()
@@ -158,10 +189,8 @@ def fuse_all_channels(root_path: Path) -> None:
                     / Path(tile_id)
                     / Path("bit" + str(ch_idx).zfill(3))
                 )
-                decon_path = input_path / Path("registered_decon_data.ome.zarr")
-                predictor_path = input_path / Path(
-                    "registered_feature_predictor_data.ome.zarr"
-                )
+                decon_path = input_path / Path("decon_data.ome.zarr")
+                predictor_path = input_path / Path("feature_predictor_data.ome.zarr")
                 im_data[0, :] = (
                     da.from_zarr(str(decon_path)).astype(np.float32)
                     * da.from_zarr(str(predictor_path)).astype(np.float32).clip(0.25, 1)
@@ -186,27 +215,40 @@ def fuse_all_channels(root_path: Path) -> None:
 
         # create fused image object using previously calculated registration metadata and all channels
         print("Constructing fusion...")
-        with dask.diagnostics.ProgressBar():
-            fused = fusion.fuse(
-                [msi_utils.get_sim_from_msim(msim_full) for msim_full in msims_full],
-                transform_key="affine_registered",
-                output_chunksize=512,
-                overlap_in_pixels=64,
-            )
-
         fused_path = root_path / Path("fused")
         fused_path.mkdir(exist_ok=True)
         ome_output_path = fused_path / Path("ch" + str(ch_idx).zfill(2) + ".ome.zarr")
         print(f"Fusing views and saving output to {ome_output_path!s}...")
-        with dask.diagnostics.ProgressBar():
-            fused = fused.clip(min=0, max=np.iinfo(np.uint16).max).astype(np.uint16)
-            fused = ngff_utils.write_sim_to_ome_zarr(
-                fused,
-                str(ome_output_path),
-                overwrite=True,
-            )
+        fused = fusion.fuse(
+            [msi_utils.get_sim_from_msim(msim_full) for msim_full in msims_full],
+            transform_key="affine_registered",
+            output_chunksize=fused_chunk_size,
+            overlap_in_pixels=64,
+            output_zarr_url=str(ome_output_path),
+            zarr_options={
+                "ome_zarr": True,
+                "ngff_version": ngff_version,
+                "overwrite": True,
+            },
+            batch_options={
+                "batch_func": misc_utils.process_batch_using_joblib,
+                "n_batch": int(n_jobs),
+                "batch_func_kwargs": {
+                    "n_jobs": int(n_jobs),
+                    "backend": "threading",
+                },
+            },
+            **(
+                {"backend": "cupy", "output_on_backend": False}
+                if use_gpu_fusion
+                else {}
+            ),
+        )
+        if not hasattr(fused, "data"):
+            fused = msi_utils.get_sim_from_msim(fused, scale="scale0")
+        del fused
 
 
 if __name__ == "__main__":
-    root_path = Path(r"/mnt/data2/bioprotean/20250220_Bartelle_control_smFISH_TqIB")
+    root_path = Path(r"/data/smfish/20260311_bartelle_smFISH_cryo_48hr_male/")
     fuse_all_channels(root_path)
