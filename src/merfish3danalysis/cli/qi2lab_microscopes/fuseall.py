@@ -19,10 +19,20 @@ import numpy as np
 from multiview_stitcher import fusion, misc_utils, msi_utils, ngff_utils, registration
 from multiview_stitcher import spatial_image_utils as si_utils
 from tqdm import tqdm
+from zarr.core.group import GroupMetadata
 
 from merfish3danalysis.qi2labDataStore import qi2labDataStore
 
 mp.set_start_method("spawn", force=True)
+
+_original_group_from_dict = GroupMetadata.from_dict.__func__
+
+def _group_from_dict_compat(cls, data):
+    data = dict(data)
+    data.pop("extra_attributes", None)
+    return _original_group_from_dict(cls, data)
+
+GroupMetadata.from_dict = classmethod(_group_from_dict_compat)
 
 
 def fuse_all_channels(
