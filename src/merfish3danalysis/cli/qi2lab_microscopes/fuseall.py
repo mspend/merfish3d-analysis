@@ -27,13 +27,16 @@ mp.set_start_method("spawn", force=True)
 
 _original_group_from_dict = GroupMetadata.from_dict.__func__
 
-def _group_from_dict_compat(cls, data):
+def _group_from_dict_ignore_extra_attributes(cls, data):
     data = dict(data)
     data.pop("extra_attributes", None)
+    # Ignore the offending key if it exists.
     return _original_group_from_dict(cls, data)
 
-GroupMetadata.from_dict = classmethod(_group_from_dict_compat)
-
+# replaces the class method with this patch for compatibility
+GroupMetadata.from_dict = classmethod(
+    _group_from_dict_ignore_extra_attributes
+)
 
 def fuse_all_channels(
     root_path: Path,
