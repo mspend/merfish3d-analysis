@@ -135,6 +135,10 @@ def run_cellpose(
     global_roi_path = imagej_roi_path_dir / Path("global_coords_rois.zip")
     pixel_spacing_rois = roiwrite(global_roi_path, global_spacing_rois)
 
+    # update datastore state
+    datastore_state = datastore.datastore_state
+    datastore_state.update({"SegmentedCells": True})
+    datastore.datastore_state = datastore_state
 
 def warp_point(
     pixel_space_point: np.ndarray,
