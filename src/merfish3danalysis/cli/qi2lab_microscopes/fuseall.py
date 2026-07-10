@@ -89,7 +89,7 @@ def fuse_all_channels(
     # convert local tiles from first round to multiscale spatial images
     print("\nLazy loading fiducial channel...")
     msims = []
-    for _, tile_id in enumerate(tqdm(datastore.tile_ids, desc="tile")):
+    for _, tile_id in enumerate(tqdm(datastore.tile_ids[0:5], desc="tile")):
         # load voxel size
         voxel_zyx_um = datastore.voxel_size_zyx_um
 
@@ -140,10 +140,20 @@ def fuse_all_channels(
         )
 
         # convert to multiscale spatial image object and append to list for registration
+        print(tile_id)
+        print(tile_grid_positions)
+        # print(sim)
         msim = msi_utils.get_msim_from_sim(sim, scale_factors=[])
         msims.append(msim)
         del sim_on_disk
         gc.collect()
+
+    # plot the tile configuration
+    from multiview_stitcher import vis_utils
+    import matplotlib.pyplot as plt
+
+    fig, ax = vis_utils.plot_positions(msims, transform_key='stage_metadata', use_positional_colors=False)
+    plt.show(block=True)
 
     # perform registration
     print("\nPerforming registration...")
