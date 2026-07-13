@@ -65,7 +65,7 @@ def fuse_all_channels(
 
     # initialize datastore
     print("\nInitializing datastore...")
-    datastore_path = root_path / Path(r"qi2labdatastore")
+    datastore_path = root_path / Path(r"qi2labdatastore_7-10-26")
     datastore = qi2labDataStore(datastore_path)
     gene_ids = list(datastore.codebook["gene_id"])
     channel_ids = ["fiducial", *gene_ids]
@@ -89,7 +89,7 @@ def fuse_all_channels(
     # convert local tiles from first round to multiscale spatial images
     print("\nLazy loading fiducial channel...")
     msims = []
-    for _, tile_id in enumerate(tqdm(datastore.tile_ids[0:5], desc="tile")):
+    for _, tile_id in enumerate(tqdm(datastore.tile_ids[0:12], desc="tile")):
         # load voxel size
         voxel_zyx_um = datastore.voxel_size_zyx_um
 
@@ -153,6 +153,19 @@ def fuse_all_channels(
     import matplotlib.pyplot as plt
 
     fig, ax = vis_utils.plot_positions(msims, transform_key='stage_metadata', use_positional_colors=False)
+    
+    # Make the figure wider so labels are not clipped
+    fig.set_size_inches(14, 6)
+
+    # Rotate x tick labels diagonally
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+
+    # Push x-axis label farther down
+    ax.set_xlabel(ax.get_xlabel(), labelpad=18)
+
+    # Add extra margins so y-label and rotated ticks fit
+    fig.subplots_adjust(left=0.16, bottom=0.28, right=0.98, top=0.95)
+
     plt.show(block=True)
 
     # perform registration
@@ -163,7 +176,7 @@ def fuse_all_channels(
             reg_channel_index=0,
             transform_key="stage_metadata",
             new_transform_key="affine_registered",
-            pre_registration_pruning_method="keep_axis_aligned",
+            # pre_registration_pruning_method="keep_axis_aligned",
             registration_binning={"z": 3, "y": 6, "x": 6},
             post_registration_do_quality_filter=True,
         )
