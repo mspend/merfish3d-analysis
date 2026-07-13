@@ -24,6 +24,17 @@ from merfish3danalysis.utils.decode_warping import warp_bit_image_to_reference
 app = typer.Typer()
 app.pretty_exceptions_enable = False
 
+from zarr.core.group import GroupMetadata
+
+_original_group_from_dict = GroupMetadata.from_dict.__func__
+
+def _group_from_dict_compat(cls, data):
+    data = dict(data)
+    data.pop("extra_attributes", None)
+    return _original_group_from_dict(cls, data)
+
+GroupMetadata.from_dict = classmethod(_group_from_dict_compat)
+
 
 def _resolve_array(array_like: Any) -> Any:
     """Return a concrete array from datastore results or dask futures."""
@@ -143,6 +154,20 @@ def _write_fused_ome_tiff(
         )
 
 
+def _load_ome_zarr_image_array(path: Path) -> np.ndarray:
+    """Load the image array from an OME-Zarr group."""
+
+    import zarr
+
+    root = zarr.open_group(str(path), mode="r")
+    array_keys = list(root.array_keys())
+    if not array_keys:
+        raise RuntimeError(f"No arrays were found inside OME-Zarr group {path!s}.")
+
+    array_name = "0" if "0" in array_keys else array_keys[0]
+    return root[array_name]
+
+
 @app.command()
 def fuse_all_channels(
     root_path: Path,
@@ -244,7 +269,11 @@ def fuse_all_channels(
                     / Path("round001")
                     / Path("registered_decon_data.ome.zarr")
                 )
-                im_data[0, :] = da.from_zarr(str(input_path)).astype(np.uint16)
+
+                im_data[0, :] = da.from_array(
+                    _load_ome_zarr_image_array(input_path),
+                    chunks=im_shape,
+                ).astype(np.uint16)
             # lazy load readout bits warped to the first-round local reference
             else:
                 bit_id = bit_ids[ch_idx - 1]
@@ -268,7 +297,7 @@ def fuse_all_channels(
                 translation=tile_grid_positions,
                 affine=affine_zyx_px,
                 transform_key=stage_transform_key,
-                c_coords=channel_ids[ch_idx],
+                c_coords=[channel_ids[ch_idx]],
             )
 
             # convert to multiscale spatial image object and append to list for fusion
