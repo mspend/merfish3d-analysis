@@ -59,7 +59,7 @@ def compose_decode_warp_transform_zyx_um(
     chromatic_transform_zyx_um: np.ndarray | None = None,
 ) -> np.ndarray:
     """
-    Compose decode-time transforms for image loading.
+    Compose chromatic and fiducial transforms for decode-time image loading.
 
     Parameters
     ----------
@@ -67,7 +67,8 @@ def compose_decode_warp_transform_zyx_um(
         Physical transform from reference-round Z, Y, X coordinates into the
         bit's native fiducial-round coordinates.
     chromatic_transform_zyx_um : numpy.ndarray or None, default=None
-        Optional chromatic calibration transform. When omitted, an identity
+        Chromatic calibration transform mapping the bit wavelength toward the
+        reference wavelength in physical Z, Y, X coordinates. When omitted, an identity
         transform is used.
 
     Returns
