@@ -56,19 +56,19 @@ def load_bit_round_transform_zyx_um(
 def compose_decode_warp_transform_zyx_um(
     *,
     round_transform_zyx_um: np.ndarray,
-    chromatic_transform_zyx_um: np.ndarray,
+    chromatic_transform_zyx_um: np.ndarray | None = None,
 ) -> np.ndarray:
     """
-    Compose chromatic and fiducial transforms for decode-time image loading.
+    Compose decode-time transforms for image loading.
 
     Parameters
     ----------
     round_transform_zyx_um : numpy.ndarray
         Physical transform from reference-round Z, Y, X coordinates into the
         bit's native fiducial-round coordinates.
-    chromatic_transform_zyx_um : numpy.ndarray
-        Chromatic calibration transform mapping the bit wavelength toward the
-        reference wavelength in physical Z, Y, X coordinates.
+    chromatic_transform_zyx_um : numpy.ndarray or None, default=None
+        Optional chromatic calibration transform. When omitted, an identity
+        transform is used.
 
     Returns
     -------
@@ -77,6 +77,9 @@ def compose_decode_warp_transform_zyx_um(
         native readout image coordinates, suitable for
         :func:`warp_array_to_reference_gpu`.
     """
+
+    if chromatic_transform_zyx_um is None:
+        chromatic_transform_zyx_um = np.eye(4, dtype=np.float32)
 
     return np.linalg.inv(np.asarray(chromatic_transform_zyx_um, dtype=np.float32)) @ (
         np.asarray(round_transform_zyx_um, dtype=np.float32)
@@ -88,7 +91,15 @@ def _load_chromatic_transform_or_identity(
     *,
     emission_wavelength_um: float,
 ) -> np.ndarray:
-    chromatic_transform_zyx_um = datastore.load_chromatic_affine_transform_zyx_um(
+    load_chromatic_transform = getattr(
+        datastore,
+        "load_chromatic_affine_transform_zyx_um",
+        None,
+    )
+    if load_chromatic_transform is None:
+        return np.eye(4, dtype=np.float32)
+
+    chromatic_transform_zyx_um = load_chromatic_transform(
         wavelength_um=emission_wavelength_um,
     )
     if chromatic_transform_zyx_um is None:
