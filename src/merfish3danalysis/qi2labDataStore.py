@@ -4720,6 +4720,7 @@ class qi2labDataStore:
         except (OSError, TimeoutError):
             print("Error saving Cellpose image.")
             return None
+        
     def load_local_round_transform_zyx_um(
         self,
         tile: int | str,

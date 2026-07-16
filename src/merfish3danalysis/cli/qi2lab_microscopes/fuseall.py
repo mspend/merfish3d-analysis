@@ -4,6 +4,8 @@ Fuse all channels into individual OME-NGFF v0.5 stores for viewing.
 Shepherd 2025/03 - created script.
 """
 
+# in merfish3d-stitcher environment
+
 import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning)
