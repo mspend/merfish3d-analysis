@@ -4720,3 +4720,64 @@ class qi2labDataStore:
         except (OSError, TimeoutError):
             print("Error saving Cellpose image.")
             return None
+    def load_local_round_transform_zyx_um(
+        self,
+        tile: int | str,
+        round: int | str,
+    ) -> ArrayLike | None:
+        """
+        Load the local fiducial round transform for one tile.
+
+        Parameters
+        ----------
+        tile : int | str
+            Tile index or tile identifier.
+        round : int | str
+            Fiducial round index or round identifier.
+
+        Returns
+        -------
+        ArrayLike or None
+            Homogeneous 4x4 affine transform in physical Z, Y, X microns. The
+            transform maps first-round reference coordinates to coordinates in
+            the requested moving round. Returns None when the transform is not
+            present.
+        """
+
+        if isinstance(tile, int):
+            if tile < 0 or tile > self._num_tiles:
+                print("Set tile index >=0 and <=" + str(self._num_tiles))
+                return None
+            tile_id = self._tile_ids[tile]
+        elif isinstance(tile, str):
+            if tile not in self._tile_ids:
+                print("set valid tiled id")
+                return None
+            tile_id = tile
+        else:
+            print("'tile' must be integer index or string identifier")
+            return None
+
+        if isinstance(round, int):
+            if round < 0:
+                print("Set round index >=0 and <" + str(self._num_rounds))
+                return None
+            round_id = self._round_ids[round]
+        elif isinstance(round, str):
+            if round not in self._round_ids:
+                print("Set valid round id")
+                return None
+            round_id = round
+        else:
+            print("'round' must be integer index or string identifier")
+            return None
+        try:
+            entity_root = self._fiducial_root_path / Path(tile_id) / Path(round_id)
+            attributes = self._load_entity_attributes(entity_root)
+            return np.asarray(
+                attributes["local_round_transform_zyx_um"], dtype=np.float32
+            )
+        except (FileNotFoundError, json.JSONDecodeError, KeyError):
+            print(tile_id, round_id)
+            print("Local round transform mapping back to first round not found.")
+            return None
