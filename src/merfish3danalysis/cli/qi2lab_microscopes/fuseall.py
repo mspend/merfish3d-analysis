@@ -8,6 +8,7 @@ Shepherd 2025/03 - created script.
 
 import numpy as np
 import zarr
+from zarr.core.group import GroupMetadata
 import dask
 import dask.array as da
 import dask.diagnostics
@@ -38,6 +39,28 @@ def parse_args():
     )
     return parser.parse_args()
 
+def _load_ome_zarr_image_array(path: Path) -> np.ndarray:
+    """Load the image array from an OME-Zarr group."""
+
+    import zarr
+
+    root = zarr.open_group(str(path), mode="r")
+    array_keys = list(root.array_keys())
+    if not array_keys:
+        raise RuntimeError(f"No arrays were found inside OME-Zarr group {path!s}.")
+
+    array_name = "0" if "0" in array_keys else array_keys[0]
+    return root[array_name]
+
+_original_group_from_dict = GroupMetadata.from_dict.__func__
+
+def _group_from_dict_compat(cls, data):
+    data = dict(data)
+    data.pop("extra_attributes", None)
+    return _original_group_from_dict(cls, data)
+
+GroupMetadata.from_dict = classmethod(_group_from_dict_compat)
+
 def main(root_path: Path):
     """Register all channels across all tiles.
 
@@ -53,14 +76,17 @@ def main(root_path: Path):
     print("\nInitializing datastore...")
     datastore_path = root_path / Path(r"qi2labdatastore")
     datastore = qi2labDataStore(datastore_path)
+    print("Using datastore at "+ str(datastore_path))
     gene_ids = list(datastore.codebook["gene_id"])
     channel_ids = ["fiducial", *gene_ids]
+    print(channel_ids)
 
     im_data = datastore.load_local_registered_image(
         tile=0, round=0, return_future=False
     )
 
     im_shape = im_data.shape
+    print(im_shape)
     del im_data
 
     # convert local tiles from first round to multiscale spatial images
@@ -96,7 +122,12 @@ def main(root_path: Path):
             / Path("round001")
             / Path("registered_decon_data.ome.zarr")
         )
-        im_data[0, :] = da.from_zarr(str(input_path)).astype(np.uint16)
+        im_data[0, :] = da.from_array(
+            _load_ome_zarr_image_array(input_path),
+            chunks=im_shape,
+        ).astype(np.uint16)  
+
+        print(f"data loaded for tile {tile_id}")          
 
         # create spatial image for all channels in current tile
         sim = si_utils.get_sim_from_array(
