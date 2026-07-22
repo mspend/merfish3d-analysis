@@ -54,12 +54,12 @@ def _load_ome_zarr_image_array(path: Path) -> np.ndarray:
 
 _original_group_from_dict = GroupMetadata.from_dict.__func__
 
-def _group_from_dict_compat(cls, data):
+def _ignore_extra_attributes(cls, data):
     data = dict(data)
     data.pop("extra_attributes", None)
     return _original_group_from_dict(cls, data)
 
-GroupMetadata.from_dict = classmethod(_group_from_dict_compat)
+GroupMetadata.from_dict = classmethod(_ignore_extra_attributes)
 
 def main(root_path: Path):
     """Register all channels across all tiles.
@@ -81,6 +81,11 @@ def main(root_path: Path):
     channel_ids = ["fiducial", *gene_ids]
     print(channel_ids)
 
+    # define output path
+    fused_path = root_path / Path("fused")
+    fused_path.mkdir(exist_ok=True)
+
+    # define shape of registered image using round 0 and a temporary variable im_data
     im_data = datastore.load_local_registered_image(
         tile=0, round=0, return_future=False
     )
@@ -90,6 +95,7 @@ def main(root_path: Path):
     del im_data
 
     # convert local tiles from first round to multiscale spatial images
+    # msims contain image data and metadata like coodinate system, voxel spacing, and transformation information
     print("\nLazy loading fiducial channel...")
     msims = []
     for _, tile_id in enumerate(tqdm(datastore.tile_ids, desc="tile")):
@@ -115,6 +121,9 @@ def main(root_path: Path):
         # create empty array to hold all channels for this tile
         im_data = da.zeros((1, im_shape[0], im_shape[1], im_shape[2]), dtype=np.uint16)
 
+        # find the Zarr file for this tile's fiducial channel, load the deconvolved data from it, and put it into the first channel of your multi-channel image array.
+
+        # construct the file path
         input_path = (
             datastore_path
             / Path("fiducial")
@@ -122,6 +131,8 @@ def main(root_path: Path):
             / Path("round001")
             / Path("registered_decon_data.ome.zarr")
         )
+
+        # load image data from zarr file
         im_data[0, :] = da.from_array(
             _load_ome_zarr_image_array(input_path),
             chunks=im_shape,
@@ -153,7 +164,7 @@ def main(root_path: Path):
             reg_channel_index=0,
             transform_key="stage_metadata",
             new_transform_key="affine_registered",
-            pre_registration_pruning_method="keep_axis_aligned",
+            # pre_registration_pruning_method="keep_axis_aligned",
             registration_binning={"z": 3, "y": 6, "x": 6},
             post_registration_do_quality_filter=True,
         )
@@ -193,7 +204,11 @@ def main(root_path: Path):
                     / Path("round001")
                     / Path("registered_decon_data.ome.zarr")
                 )
-                im_data[0, :] = da.from_zarr(str(input_path)).astype(np.uint16)
+                im_data[0, :] = da.from_array(
+                    _load_ome_zarr_image_array(input_path),
+                    chunks=im_shape,
+                ).astype(np.uint16)
+
             # lazy load deconvolved * (u-fish prediction>0.25) readout bits
             else:
                 input_path = (
@@ -207,8 +222,8 @@ def main(root_path: Path):
                     "registered_feature_predictor_data.ome.zarr"
                 )
                 im_data[0, :] = (
-                    da.from_zarr(str(decon_path)).astype(np.float32)
-                    * da.from_zarr(str(predictor_path)).astype(np.float32).clip(0.25, 1)
+                    da.from_array(_load_ome_zarr_image_array(decon_path)).astype(np.float32)
+                    * da.from_array(_load_ome_zarr_image_array(predictor_path)).astype(np.float32).clip(0.25, 1)
                 ).astype(np.uint16)
 
             # create spatial image for all channels in current tile using registration metadata instead of stage metadata
@@ -238,9 +253,7 @@ def main(root_path: Path):
                 overlap_in_pixels=64,
             )
 
-        fused_path = root_path / Path("fused")
-        fused_path.mkdir(exist_ok=True)
-        ome_output_path = fused_path / Path("ch" + str(ch_idx).zfill(2) + ".ome.zarr")
+        ome_output_path = fused_path / Path("ch" + str(ch_idx).zfill(3) + ".ome.zarr")
         print(f"Fusing views and saving output to {ome_output_path!s}...")
         with dask.diagnostics.ProgressBar():
             fused = fused.clip(min=0, max=np.iinfo(np.uint16).max).astype(np.uint16)
@@ -249,6 +262,51 @@ def main(root_path: Path):
                 str(ome_output_path),
                 overwrite=True,
             )
+
+                #  write out each channel as a tiff file
+        if ch_id == 0:
+            filename = "fused_"+"fiducial"+".ome.tiff"
+        else:
+            filename = "fused_"+"bit"+str(ch_id).zfill(3)+".ome.tiff"
+        filename_path = fused_path / Path(filename)
+
+        with TiffWriter(filename_path, bigtiff=True) as tif:
+            metadata={
+                'axes': 'ZYX',
+                'SignificantBits': 16,
+                'PhysicalSizeX': float(voxel_zyx_um[2]),
+                'PhysicalSizeXUnit': 'µm',
+                'PhysicalSizeY': float(voxel_zyx_um[1]),
+                'PhysicalSizeYUnit': 'µm',
+                'PhysicalSizeZ': float(voxel_zyx_um[0]),
+                'PhysicalSizeZUnit': 'µm',
+            }
+            options = dict(
+                compression='zlib',
+                compressionargs={'level': 8},
+                predictor=True,
+                photometric='minisblack',
+                resolutionunit='CENTIMETER',
+            )
+
+            # convert the dask array to numpy BEFORE writing
+            fused_computed = fused.compute()
+
+            # the image data is stored in the last three columns of the array, zyx
+            fused_zyx = fused_computed[0, 0, :, :, :]
+
+            tif.write(
+                fused_zyx,
+                resolution=(
+                    1e4 / float(voxel_zyx_um[2]),
+                    1e4 / float(voxel_zyx_um[1])
+                ),
+                **options,
+                metadata=metadata
+            )
+            print(f"Done with bit {ch_id}")
+
+    print("done")
 
 
 if __name__ == "__main__":
