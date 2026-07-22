@@ -42,8 +42,6 @@ def parse_args():
 def _load_ome_zarr_image_array(path: Path) -> np.ndarray:
     """Load the image array from an OME-Zarr group."""
 
-    import zarr
-
     root = zarr.open_group(str(path), mode="r")
     array_keys = list(root.array_keys())
     if not array_keys:
@@ -234,7 +232,7 @@ def main(root_path: Path):
                 translation=origin,
                 affine=affine,
                 transform_key="affine_registered",
-                c_coords=channel_ids[ch_idx],
+                c_coords=[channel_ids[ch_idx]],
             )
 
             # convert to multiscale spatial image object and append to list for fusion
