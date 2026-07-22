@@ -3,29 +3,42 @@ Fuse all channels into individual OME-NGFF v0.5 stores for viewing.
 
 Shepherd 2025/03 - created script.
 """
+# run in merfish3d-stitcher environment
 
+
+import numpy as np
+import zarr
+import dask
+import dask.array as da
+import dask.diagnostics
+from multiview_stitcher import fusion, msi_utils, ngff_utils, registration
+from multiview_stitcher import spatial_image_utils as si_utils
+from pathlib import Path
+import argparse
+from tqdm import tqdm
+import gc
+import multiprocessing as mp
+from tifffile import TiffWriter
+from merfish3danalysis.qi2labDataStore import qi2labDataStore
 import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.simplefilter("ignore", category=FutureWarning)
-import gc
-import multiprocessing as mp
-from pathlib import Path
-
-import dask
-import dask.array as da
-import dask.diagnostics
-import numpy as np
-from multiview_stitcher import fusion, msi_utils, ngff_utils, registration
-from multiview_stitcher import spatial_image_utils as si_utils
-from tqdm import tqdm
-
-from merfish3danalysis.qi2labDataStore import qi2labDataStore
 
 mp.set_start_method("spawn", force=True)
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Fuse channels and export per-channel OME-TIFFs."
+    )
+    parser.add_argument(
+        "root_path",
+        type=Path,
+        help="Root experiment folder (example: /data/smFISH/20251028_bartelle_smFISH_mm_microglia_newbuffers)",
+    )
+    return parser.parse_args()
 
-def fuse_all_channels(root_path: Path) -> None:
+def main(root_path: Path):
     """Register all channels across all tiles.
 
     Registration is performed using the fiducial channel.
@@ -208,5 +221,5 @@ def fuse_all_channels(root_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    root_path = Path(r"/mnt/data2/bioprotean/20250220_Bartelle_control_smFISH_TqIB")
-    fuse_all_channels(root_path)
+    args = parse_args()
+    main(args.root_path)
