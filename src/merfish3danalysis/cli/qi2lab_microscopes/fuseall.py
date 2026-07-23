@@ -170,12 +170,13 @@ def main(root_path: Path):
     print("\nLazy loading and fusing full-resolution fiducial and readouts...")
     tile_ids = datastore.tile_ids
 
-    for ch_idx in tqdm(range(len(channel_ids)), desc="channel"):
+    for ch_id in tqdm(range(len(channel_ids)), desc="channel"):
         msims_full = []
-        for tile_idx, msim in enumerate(tqdm(msims, desc="tile")):
+        for tile_id, msim in enumerate(tqdm(msims, desc="tile")):
             # parse the registered fidicual channel to get the registration metadata
             affine = msi_utils.get_transform_from_msim(
-                msim, transform_key="affine_registered"
+                msim, 
+                transform_key="affine_registered"
             ).data.squeeze()
             affine = np.round(affine, 2)
             origin = si_utils.get_origin_from_sim(
@@ -191,10 +192,10 @@ def main(root_path: Path):
             )
 
             # lazy load tile data
-            tile_id = tile_ids[tile_idx]
+            tile_id = tile_ids[tile_id]
 
             # lazy load deconvolved fiducial
-            if ch_idx == 0:
+            if ch_id == 0:
                 input_path = (
                     datastore_path
                     / Path("fiducial")
@@ -206,14 +207,13 @@ def main(root_path: Path):
                     _load_ome_zarr_image_array(input_path),
                     chunks=im_shape,
                 ).astype(np.uint16)
-
             # lazy load deconvolved * (u-fish prediction>0.25) readout bits
             else:
                 input_path = (
                     datastore_path
                     / Path("readouts")
                     / Path(tile_id)
-                    / Path("bit" + str(ch_idx).zfill(3))
+                    / Path("bit" + str(ch_id).zfill(3))
                 )
                 decon_path = input_path / Path("registered_decon_data.ome.zarr")
                 predictor_path = input_path / Path(
@@ -232,7 +232,7 @@ def main(root_path: Path):
                 translation=origin,
                 affine=affine,
                 transform_key="affine_registered",
-                c_coords=[channel_ids[ch_idx]],
+                c_coords=[channel_ids[ch_id]],
             )
 
             # convert to multiscale spatial image object and append to list for fusion
@@ -251,7 +251,7 @@ def main(root_path: Path):
                 overlap_in_pixels=64,
             )
 
-        ome_output_path = fused_path / Path("ch" + str(ch_idx).zfill(3) + ".ome.zarr")
+        ome_output_path = fused_path / Path("ch" + str(ch_id).zfill(3) + ".ome.zarr")
         print(f"Fusing views and saving output to {ome_output_path!s}...")
         with dask.diagnostics.ProgressBar():
             fused = fused.clip(min=0, max=np.iinfo(np.uint16).max).astype(np.uint16)
@@ -261,7 +261,7 @@ def main(root_path: Path):
                 overwrite=True,
             )
 
-                #  write out each channel as a tiff file
+        #  write out each channel as a tiff file
         if ch_id == 0:
             filename = "fused_"+"fiducial"+".ome.tiff"
         else:
