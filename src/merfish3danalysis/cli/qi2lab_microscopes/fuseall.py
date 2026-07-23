@@ -251,15 +251,17 @@ def main(root_path: Path):
                 overlap_in_pixels=64,
             )
 
-        ome_output_path = fused_path / Path("ch" + str(ch_id).zfill(3) + ".ome.zarr")
-        print(f"Fusing views and saving output to {ome_output_path!s}...")
-        with dask.diagnostics.ProgressBar():
-            fused = fused.clip(min=0, max=np.iinfo(np.uint16).max).astype(np.uint16)
-            fused = ngff_utils.write_sim_to_ome_zarr(
-                fused,
-                str(ome_output_path),
-                overwrite=True,
-            )
+        # ome_output_path = fused_path / Path("ch" + str(ch_id).zfill(3) + ".ome.zarr")
+        # print(f"Fusing views and saving output to {ome_output_path!s}...")
+        # with dask.diagnostics.ProgressBar():
+        #     fused = fused.clip(min=0, max=np.iinfo(np.uint16).max).astype(np.uint16)
+        #     fused = ngff_utils.write_sim_to_ome_zarr(
+        #         fused,
+        #         str(ome_output_path),
+        #         overwrite=True,
+        #         # use the following parameter if you don't want to write a pyramid of resolutions
+        #         downscale_factors_per_spatial_dim={"z": 1, "y": 1, "x": 1},
+        #     )
 
         #  write out each channel as a tiff file
         if ch_id == 0:
